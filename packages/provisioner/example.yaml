@@ -1,0 +1,30 @@
+# Example Zurvan first-boot config — the shape the provisioner targets.
+#
+# Pass it in via the kernel cmdline:
+#   APPEND_EXTRA="zurvan.config=/etc/zurvan.yaml" scripts/run-qemu.sh
+#
+# Keys are a FIXED, bounded set (hostname / network / users / services).
+# Anything not listed here is out of scope by design — see ROADMAP.md.
+
+hostname: zurvan-box
+
+network:
+  eth0:
+    # "dhcp" (default in QEMU) or a static block:
+    dhcp: false
+    address: 10.0.2.50/24
+    gateway: 10.0.2.2
+    dns:
+      - 10.0.2.3
+
+users:
+  - name: zurvan
+    # shell defaults to /bin/bash if omitted
+    shell: /bin/bash
+    # one of password (hashed) / authorized_keys is enough
+    authorized_keys:
+      - "ssh-ed25519 AAAA... example-key"
+
+services:
+  # names the provisioner knows how to start; bounded set, not arbitrary units
+  - networking

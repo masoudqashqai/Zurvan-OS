@@ -1,0 +1,30 @@
+#!/bin/sh
+# rc.init — run once by the Zurvan C PID 1 after mounts/console are up.
+#
+# This is the hook for bringing the system to a usable state. For v1 that means
+# networking (milestone 5). Later, the first-boot YAML provisioner (milestone 6)
+# is invoked from here too.
+#
+# Keep it idempotent and don't let it hang forever — PID 1 waits for it.
+
+# --- loopback ---------------------------------------------------------------
+ip link set lo up 2>/dev/null || ifconfig lo up 2>/dev/null
+
+# --- DHCP on eth0 (QEMU user-mode net: 10.0.2.0/24 + DNS forwarding) --------
+# busybox udhcpc calls /etc/udhcpc/default.script with the lease.
+# -n: give up if no lease (don't block boot forever); drop it once you trust it.
+if [ -e /sys/class/net/eth0 ]; then
+	ip link set eth0 up 2>/dev/null
+	udhcpc -i eth0 -n -t 5 -T 2 || echo "[rc.init] no DHCP lease on eth0 (continuing)"
+else
+	echo "[rc.init] no eth0 — is VIRTIO_NET in the kernel + -netdev user in QEMU?"
+fi
+
+# --- first-boot provisioner (milestone 6) -----------------------------------
+# Enabled once packages/provisioner is built and installed. Left commented so
+# rc.init is a no-op for networking-only milestones.
+# if [ -x /usr/bin/zurvan-provision ] && [ ! -e /var/lib/zurvan/provisioned ]; then
+#	/usr/bin/zurvan-provision && mkdir -p /var/lib/zurvan && : > /var/lib/zurvan/provisioned
+# fi
+
+echo "[rc.init] done."

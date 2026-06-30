@@ -1,0 +1,90 @@
+#!/bin/sh
+# Assemble the root filesystem and pack it into build/rootfs.cpio.gz.
+#
+# Pulls together:
+#   - the skeleton tree in rootfs/        (etc, scripts, ...)
+#   - the static busybox + bash           (userland/build/)
+#   - the C PID 1                          (init/init)        [USE_C_INIT=1]
+#     ...or the throwaway shell /init      (rootfs/init.sh)   [USE_C_INIT=0]
+#
+# Output: build/rootfs.cpio.gz  (the initrd you pass to QEMU)
+#
+# USE_C_INIT controls the milestone:
+#   USE_C_INIT=0  -> milestone 2: boot to a busybox shell via rootfs/init.sh
+#   USE_C_INIT=1  -> milestone 3+: boot the C PID 1 (default)
+set -eu
+
+USE_C_INIT="${USE_C_INIT:-1}"
+
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+BUILD="${BUILD:-$HERE/build}"
+ROOTFS_OUT="${ROOTFS_OUT:-$BUILD/rootfs}"
+INITRD="${INITRD:-$BUILD/rootfs.cpio.gz}"
+
+BUSYBOX="$HERE/userland/build/busybox"
+BASH_BIN="$HERE/userland/build/bash"
+INIT_BIN="$HERE/init/init"
+
+echo ">> assembling rootfs in $ROOTFS_OUT"
+rm -rf "$ROOTFS_OUT"
+mkdir -p "$ROOTFS_OUT"
+
+# --- directory skeleton -----------------------------------------------------
+for d in bin sbin etc proc sys dev tmp root run var/lib usr/bin usr/sbin; do
+	mkdir -p "$ROOTFS_OUT/$d"
+done
+chmod 1777 "$ROOTFS_OUT/tmp"
+
+# --- skeleton /etc and friends ----------------------------------------------
+cp -a "$HERE/rootfs/etc" "$ROOTFS_OUT/"
+chmod +x "$ROOTFS_OUT/etc/rc.init" "$ROOTFS_OUT/etc/udhcpc/default.script"
+
+# --- busybox + applet symlinks ----------------------------------------------
+if [ ! -x "$BUSYBOX" ]; then
+	echo "!! missing $BUSYBOX — run userland/build-busybox.sh first" >&2
+	exit 1
+fi
+cp "$BUSYBOX" "$ROOTFS_OUT/bin/busybox"
+# Let busybox tell us its applet list and symlink each one to itself.
+"$BUSYBOX" --list-full 2>/dev/null | while read -r applet; do
+	[ -n "$applet" ] || continue
+	mkdir -p "$ROOTFS_OUT/$(dirname "$applet")"
+	ln -sf /bin/busybox "$ROOTFS_OUT/$applet"
+done
+# Guarantee /bin/sh exists even if --list-full was unavailable.
+[ -e "$ROOTFS_OUT/bin/sh" ] || ln -sf /bin/busybox "$ROOTFS_OUT/bin/sh"
+
+# --- bash -------------------------------------------------------------------
+if [ -x "$BASH_BIN" ]; then
+	cp "$BASH_BIN" "$ROOTFS_OUT/bin/bash"
+else
+	echo "!! no bash at $BASH_BIN — shell will fall back to busybox sh" >&2
+fi
+
+# --- /init ------------------------------------------------------------------
+if [ "$USE_C_INIT" = "1" ]; then
+	if [ ! -x "$INIT_BIN" ]; then
+		echo "!! missing $INIT_BIN — run 'make -C init' first" >&2
+		exit 1
+	fi
+	cp "$INIT_BIN" "$ROOTFS_OUT/init"
+	echo ">> /init = C PID 1"
+else
+	cp "$HERE/rootfs/init.sh" "$ROOTFS_OUT/init"
+	echo ">> /init = throwaway shell (milestone 2)"
+fi
+chmod +x "$ROOTFS_OUT/init"
+
+# --- a couple of device nodes (devtmpfs fills the rest at boot) -------------
+# Created best-effort; needs root/fakeroot. Not fatal if it fails — the kernel's
+# devtmpfs provides /dev/console and /dev/null once it mounts.
+mknod -m 600 "$ROOTFS_OUT/dev/console" c 5 1 2>/dev/null || true
+mknod -m 666 "$ROOTFS_OUT/dev/null"    c 1 3 2>/dev/null || true
+
+# --- pack -------------------------------------------------------------------
+mkdir -p "$BUILD"
+echo ">> packing $INITRD"
+( cd "$ROOTFS_OUT" && find . | cpio -o -H newc 2>/dev/null | gzip -9 ) > "$INITRD"
+
+echo ">> done: $INITRD"
+ls -lh "$INITRD"

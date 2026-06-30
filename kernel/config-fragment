@@ -1,0 +1,39 @@
+# Zurvan kernel config fragment — the must-have symbols for the QEMU/initramfs path.
+#
+# This is NOT a full kernel config. It is the small set of options that the boot
+# chain depends on. The workflow is:
+#
+#   1. make defconfig            # sane x86_64 baseline
+#   2. merge this fragment in    # ensure our essentials are set
+#   3. make menuconfig           # eyeball it / trim later
+#
+# build.sh applies this via scripts/kconfig/merge_config.sh when present.
+
+# --- initramfs: unpack our cpio.gz into RAM and run /init --------------------
+CONFIG_BLK_DEV_INITRD=y
+
+# --- serial console: makes `qemu -nographic` usable (console=ttyS0) ----------
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_TTY=y
+CONFIG_PRINTK=y
+
+# --- /dev populated by the kernel -------------------------------------------
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+
+# --- virtio: networking (and friends) under QEMU ----------------------------
+CONFIG_PCI=y
+CONFIG_VIRTIO=y
+CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_NET=y
+
+# --- filesystems used by the rootfs / overlay stretch goal ------------------
+CONFIG_TMPFS=y
+CONFIG_PROC_FS=y
+CONFIG_SYSFS=y
+# OVERLAY_FS is for the immutable-root stretch goal; harmless to enable early.
+CONFIG_OVERLAY_FS=y
+
+# --- 64-bit ELF binaries (busybox, bash, our init) --------------------------
+CONFIG_BINFMT_ELF=y
