@@ -1,16 +1,17 @@
 # Zurvan
 
-> A minimal Linux distribution built **from scratch in a git repo** — kernel, userland,
-> a hand-written PID 1, and networking, assembled one layer at a time.
+> A minimal Linux distribution assembled **from scratch in a git repo** — kernel,
+> userland, a custom PID 1, and networking, built one layer at a time.
 
-Zurvan is a learning project, not a rebranded distro. The point is to assemble each
-layer myself: configure and build the kernel, ship a static userland, write an init
-process in C, and bring up networking — then add one signature feature that gives the
+Zurvan is a from-source Linux system, not a rebranded distribution. Each layer is
+assembled directly: the kernel is configured and built from source, the userland is
+statically linked, the init process (PID 1) is written in C, and networking is brought
+up explicitly. On top of that spine sits a single signature feature that gives the
 system its identity.
 
-The whole thing boots as an **initramfs in QEMU** — no bootloader, no disk image, no
-GRUB to start with. The kernel unpacks the root filesystem into RAM and runs `/init`.
-Feedback loop is measured in seconds.
+The system boots as an **initramfs under QEMU** — no bootloader, disk image, or GRUB
+required initially. The kernel unpacks the root filesystem into RAM and runs `/init`,
+which keeps the build-and-boot feedback loop to a few seconds.
 
 ```
 qemu-system-x86_64 -kernel kernel/build/bzImage -initrd build/rootfs.cpio.gz -nographic
@@ -24,32 +25,33 @@ qemu-system-x86_64 -kernel kernel/build/bzImage -initrd build/rootfs.cpio.gz -no
 the twins **Ohrmazd** (good) and **Ahriman** (evil) are both born of Zurvan — time as the
 neutral source from which the dual principles emerge.
 
-That maps onto how the system is built:
+The theme maps onto the system's architecture:
 
-- **Infinite time** → the immutable source image: the thing in this repo, reproducible.
-- **Allotted time** → the ephemeral running instance: what actually boots, configures
-  itself, and eventually reboots back to a clean state.
+- **Infinite time** → the immutable source image: reproducible, defined entirely by this
+  repository.
+- **Allotted time** → the ephemeral running instance: what boots, self-configures, and
+  eventually reboots back to a clean state.
 
-Any lion/dragon branding that shows up later is a *representation* of the Ohrmazd/Ahriman
-twins born of Zurvan — a visual nod to the myth, not a literal retelling of it.
+Any lion/dragon branding is intended as a *representation* of the Ohrmazd/Ahriman twins
+born of Zurvan — a visual nod to the myth rather than a literal retelling.
 
-> **Namespace note:** the name (GitHub org, package name, web collisions) has **not** been
-> checked for conflicts yet. Verify before publishing anywhere public.
+> **Namespace note:** the name (GitHub org, package name, web collisions) has not yet
+> been checked for conflicts. Verify before publishing publicly.
 
 ---
 
 ## Scope
 
-Deliberately bounded. v1 is a system that:
+v1 is deliberately bounded — a system that:
 
 1. Boots a kernel built from source.
-2. Drops into a real shell (busybox **and** bash).
-3. Does basic networking (DHCP + DNS in QEMU's user-mode network).
+2. Provides a real shell (busybox **and** bash).
+3. Performs basic networking (DHCP + DNS over QEMU's user-mode network).
 4. Self-configures on first boot from a single YAML file — the signature feature.
 
-Target effort is a weekend to a few weekends, not an open-ended mega-project. Anything
-that smells like a rabbit hole (own service manager, own package manager, container
-duality) is **explicitly deferred** to [`ROADMAP.md`](ROADMAP.md).
+The goal is a complete, working spine rather than an open-ended system. Larger
+subsystems (a custom service manager, a package manager, container duality) are
+**explicitly deferred** and tracked in [`ROADMAP.md`](ROADMAP.md).
 
 ---
 
