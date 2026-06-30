@@ -21,19 +21,15 @@ qemu-system-x86_64 -kernel kernel/build/bzImage -initrd build/rootfs.cpio.gz -no
 
 ## The name
 
-**Zurvan** is the Zoroastrian deity of infinite, boundless time. In the Zurvanite myth,
-the twins **Ohrmazd** (good) and **Ahriman** (evil) are both born of Zurvan — time as the
-neutral source from which the dual principles emerge.
+Named for the Zoroastrian principle of infinite, boundless time — the neutral source from
+which opposing forces emerge. Time is the organizing metaphor throughout the project:
+boot as a timeline, the kernel scheduler, uptime, and the contrast between what endures
+and what is fleeting.
 
-The theme maps onto the system's architecture:
-
-- **Infinite time** → the immutable source image: reproducible, defined entirely by this
-  repository.
-- **Allotted time** → the ephemeral running instance: what boots, self-configures, and
-  eventually reboots back to a clean state.
-
-Any lion/dragon branding is intended as a *representation* of the Ohrmazd/Ahriman twins
-born of Zurvan — a visual nod to the myth rather than a literal retelling.
+That contrast shapes the design. The source is fixed and timeless — a reproducible image
+defined entirely by this repository — while each running instance is ephemeral, booting
+and configuring itself before returning to a clean state. The system is the boundary
+between the two.
 
 > **Namespace note:** the name (GitHub org, package name, web collisions) has not yet
 > been checked for conflicts. Verify before publishing publicly.
@@ -131,13 +127,6 @@ The current state of the repo is **step 0**: project skeleton, scripts, and docs
 place. No layer has been built or booted yet.
 
 ---
-
-## Who this is for
-
-Built by someone with 10+ years of hands-on Linux infrastructure work (≈ LPIC-1 level),
-comfortable in bash, filesystems, and networking — and deliberately learning the parts
-that are new: kernel config internals, toolchain bootstrapping, and writing a PID 1.
-Explanations in this repo lean toward those new areas.
 
 ## License
 
