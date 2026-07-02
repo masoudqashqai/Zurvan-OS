@@ -160,4 +160,5 @@ and image/container duality.
 
 ## License
 
-Not yet licensed — treat as all-rights-reserved until a license lands.
+[MIT](LICENSE). The components Zurvan builds from source (Linux, busybox, bash,
+dropbear) keep their own upstream licenses.
