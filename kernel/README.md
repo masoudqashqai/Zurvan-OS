@@ -30,8 +30,13 @@ Navigate these with `make menuconfig`.
 
 ```sh
 kernel/build.sh            # uses a pinned default version
-KVER=6.6.30 kernel/build.sh   # or pick your own
+KVER=6.6.143 kernel/build.sh  # or pick your own
 ```
+
+Useful env vars (see `build.sh`): `ZURVAN_SRC_BASE` moves the source/build tree off
+the repo (essential under WSL — build on ext4, not /mnt/*), `KMIRROR` switches the
+download base when cdn.kernel.org is unreachable
+(e.g. `https://mirrors.tuna.tsinghua.edu.cn/kernel`).
 
 Output: `kernel/build/bzImage`.
 

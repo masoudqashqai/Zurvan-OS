@@ -12,21 +12,23 @@ BASHVER="${BASHVER:-5.2.21}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 2)}"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SRC_DIR="$HERE/src/bash-$BASHVER"
+# See kernel/build.sh: ZURVAN_SRC_BASE moves source trees off /mnt/* under WSL.
+SRC_BASE="${ZURVAN_SRC_BASE:-$HERE/src}"
+SRC_DIR="$SRC_BASE/bash-$BASHVER"
 OUT_DIR="$HERE/build"
 TARBALL="bash-$BASHVER.tar.gz"
 URL="https://ftp.gnu.org/gnu/bash/$TARBALL"
 
-mkdir -p "$HERE/src" "$OUT_DIR"
+mkdir -p "$SRC_BASE" "$OUT_DIR"
 
 # --- fetch ------------------------------------------------------------------
 if [ ! -d "$SRC_DIR" ]; then
-	if [ ! -f "$HERE/src/$TARBALL" ]; then
+	if [ ! -f "$SRC_BASE/$TARBALL" ]; then
 		echo ">> downloading $URL"
-		curl -fL --retry 3 -o "$HERE/src/$TARBALL" "$URL"
+		curl -fL --retry 3 -o "$SRC_BASE/$TARBALL" "$URL"
 	fi
 	echo ">> extracting $TARBALL"
-	tar -C "$HERE/src" -xf "$HERE/src/$TARBALL"
+	tar -C "$SRC_BASE" -xf "$SRC_BASE/$TARBALL"
 fi
 
 cd "$SRC_DIR"
