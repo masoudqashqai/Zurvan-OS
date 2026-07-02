@@ -30,7 +30,7 @@ rm -rf "$ROOTFS_OUT"
 mkdir -p "$ROOTFS_OUT"
 
 # --- directory skeleton -----------------------------------------------------
-for d in bin sbin etc proc sys dev tmp root run var/lib usr/bin usr/sbin; do
+for d in bin sbin etc home proc sys dev tmp root run var/lib usr/bin usr/sbin; do
 	mkdir -p "$ROOTFS_OUT/$d"
 done
 chmod 1777 "$ROOTFS_OUT/tmp"
@@ -60,6 +60,13 @@ if [ -x "$BASH_BIN" ]; then
 else
 	echo "!! no bash at $BASH_BIN — shell will fall back to busybox sh" >&2
 fi
+
+# --- first-boot provisioner (the signature feature) --------------------------
+cp "$HERE/packages/provisioner/zurvan-provision" "$ROOTFS_OUT/usr/bin/zurvan-provision"
+chmod +x "$ROOTFS_OUT/usr/bin/zurvan-provision"
+# Ship the example config as the default /etc/zurvan.yaml; a different file can
+# be pointed at via zurvan.config=<path> on the kernel cmdline.
+cp "$HERE/packages/provisioner/example.yaml" "$ROOTFS_OUT/etc/zurvan.yaml"
 
 # --- /init ------------------------------------------------------------------
 if [ "$USE_C_INIT" = "1" ]; then

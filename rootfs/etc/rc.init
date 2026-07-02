@@ -24,10 +24,11 @@ else
 fi
 
 # --- first-boot provisioner (milestone 6) -----------------------------------
-# Enabled once packages/provisioner is built and installed. Left commented so
-# rc.init is a no-op for networking-only milestones.
-# if [ -x /usr/bin/zurvan-provision ] && [ ! -e /var/lib/zurvan/provisioned ]; then
-#	/usr/bin/zurvan-provision && mkdir -p /var/lib/zurvan && : > /var/lib/zurvan/provisioned
-# fi
+# Runs once, guarded by a marker file. On the RAM-backed initramfs every boot
+# is a first boot; the marker matters once a persistent root exists.
+if [ -x /usr/bin/zurvan-provision ] && [ ! -e /var/lib/zurvan/provisioned ]; then
+	/usr/bin/zurvan-provision \
+		&& mkdir -p /var/lib/zurvan && : > /var/lib/zurvan/provisioned
+fi
 
 echo "[rc.init] done."

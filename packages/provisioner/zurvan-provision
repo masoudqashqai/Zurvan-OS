@@ -1,0 +1,188 @@
+#!/bin/sh
+# zurvan-provision — the first-boot provisioner ("cloud-init-lite").
+#
+# Zurvan's signature feature: read ONE YAML file and configure hostname,
+# network, users, and services. Bounded by design — the supported keys are
+# fixed (see README.md / example.yaml); anything else is out of scope.
+#
+# The YAML dialect is deliberately tiny: 2-space indentation, scalar values,
+# "- item" lists, and nested maps. No anchors, no multi-line strings, no
+# inline {}/[] collections, no tabs. Full YAML is a rabbit hole.
+#
+# Config source: zurvan.config=<path> on the kernel cmdline, falling back to
+# /etc/zurvan.yaml. Every action is idempotent — a re-run is safe. rc.init
+# additionally guards with /var/lib/zurvan/provisioned so it runs once.
+#
+# Runs on busybox sh + awk only; no other dependencies.
+set -u
+
+log()  { echo "[provision] $*"; }
+fail() { echo "[provision] ERROR: $*" >&2; exit 1; }
+
+# --- locate the config -------------------------------------------------------
+CONFIG=""
+if [ -r /proc/cmdline ]; then
+	for word in $(cat /proc/cmdline); do
+		case "$word" in
+			zurvan.config=*) CONFIG="${word#zurvan.config=}" ;;
+		esac
+	done
+fi
+CONFIG="${CONFIG:-/etc/zurvan.yaml}"
+[ -r "$CONFIG" ] || { log "no config at $CONFIG — nothing to do."; exit 0; }
+log "using $CONFIG"
+
+# --- flatten the YAML subset into KEY=VALUE lines ----------------------------
+# Nested maps become dotted paths, list items become numeric components:
+#
+#   network:                     network.eth0.dhcp=false
+#     eth0:                 ->   network.eth0.dns.0=10.0.2.3
+#       dhcp: false              users.0.name=zurvan
+#
+# The apply phase below only ever looks paths up in this flat form.
+FLAT="/tmp/zurvan-provision.$$"
+
+awk '
+function strip(s)   { gsub(/^[ \t]+/, "", s); gsub(/[ \t\r]+$/, "", s); return s }
+function unquote(s) {
+	if (s ~ /^".*"$/ || s ~ /^\x27.*\x27$/) s = substr(s, 2, length(s) - 2)
+	return s
+}
+function path(n,   i, p) {
+	p = ""
+	for (i = 0; i <= n; i++) p = (p == "" ? comp[i] : p "." comp[i])
+	return p
+}
+{
+	sub(/\r$/, "")
+	if ($0 ~ /^[ \t]*(#|$)/) next                 # blank / comment line
+	if ($0 ~ /^ *\t/) { print "tabs are not supported (line " NR ")" > "/dev/stderr"; exit 1 }
+
+	indent = 0
+	while (substr($0, indent + 1, 1) == " ") indent++
+	if (indent % 2) { print "indentation must be 2 spaces (line " NR ")" > "/dev/stderr"; exit 1 }
+	depth = int(indent / 2)
+	line  = strip($0)
+
+	# list item: consume "- " and give it a numeric path component
+	if (line ~ /^-([ \t]|$)/) {
+		listpath = path(depth - 1)
+		comp[depth] = counter[listpath]++
+		line = strip(substr(line, 2))
+		if (line == "") next                       # bare "-": children follow
+		if (line !~ /^[^:]+:([ \t]|$)/) {          # "- scalar"
+			print path(depth) "=" unquote(line)
+			next
+		}
+		depth++                                    # "- key: ..." opens a map
+	}
+
+	pos = index(line, ":")
+	if (pos == 0) { print "expected \"key:\" (line " NR ")" > "/dev/stderr"; exit 1 }
+	comp[depth] = unquote(strip(substr(line, 1, pos - 1)))
+	val = strip(substr(line, pos + 1))
+	if (val != "") print path(depth) "=" unquote(val)
+}
+' "$CONFIG" > "$FLAT" || fail "cannot parse $CONFIG"
+
+# --- lookup helpers over the flat form ----------------------------------------
+# get KEY          -> its value (first match), empty if absent
+# children PREFIX  -> unique next path components under PREFIX
+# indices PREFIX   -> numeric children of PREFIX, sorted (list iteration)
+get()      { awk -v k="$1" 'index($0, k "=") == 1 { print substr($0, length(k) + 2); exit }' "$FLAT"; }
+children() { awk -v p="$1." 'index($0, p) == 1 { r = substr($0, length(p) + 1); sub(/[.=].*/, "", r); print r }' "$FLAT" | sort -u; }
+indices()  { children "$1" | grep '^[0-9]*$' | sort -n; }
+
+# --- hostname -----------------------------------------------------------------
+hn="$(get hostname)"
+if [ -n "$hn" ]; then
+	echo "$hn" > /etc/hostname
+	hostname "$hn"
+	log "hostname = $hn"
+fi
+
+# --- network ------------------------------------------------------------------
+# Per interface: dhcp, or a static address/gateway/dns block. Interfaces not
+# mentioned keep whatever rc.init already gave them.
+for ifc in $(children network); do
+	dhcp="$(get "network.$ifc.dhcp")"
+	addr="$(get "network.$ifc.address")"
+	gw="$(get "network.$ifc.gateway")"
+
+	ip link set "$ifc" up 2>/dev/null
+
+	if [ "$dhcp" = "true" ] || [ -z "$addr" ]; then
+		udhcpc -i "$ifc" -n -t 5 -T 2 -s /etc/udhcpc/default.script \
+			|| log "dhcp failed on $ifc (continuing)"
+		continue
+	fi
+
+	ip addr flush dev "$ifc" 2>/dev/null
+	ip addr add "$addr" dev "$ifc" || { log "cannot set $addr on $ifc"; continue; }
+	if [ -n "$gw" ]; then
+		ip route del default 2>/dev/null
+		ip route add default via "$gw" dev "$ifc"
+	fi
+
+	ns_lines=""
+	for i in $(indices "network.$ifc.dns"); do
+		ns_lines="$ns_lines$(get "network.$ifc.dns.$i") "
+	done
+	if [ -n "$ns_lines" ]; then
+		: > /etc/resolv.conf
+		for ns in $ns_lines; do echo "nameserver $ns" >> /etc/resolv.conf; done
+	fi
+	log "$ifc = $addr (gw ${gw:-none})"
+done
+
+# --- users --------------------------------------------------------------------
+for i in $(indices users); do
+	name="$(get "users.$i.name")"
+	[ -n "$name" ] || continue
+	shell="$(get "users.$i.shell")"
+	shell="${shell:-/bin/bash}"
+
+	if grep -q "^$name:" /etc/passwd; then
+		log "user $name already exists"
+	else
+		adduser -D -s "$shell" "$name" || { log "adduser $name failed"; continue; }
+		log "user $name created (shell $shell)"
+	fi
+
+	# password: pre-hashed (crypt format), applied verbatim
+	pw="$(get "users.$i.password")"
+	[ -n "$pw" ] && printf '%s:%s\n' "$name" "$pw" | chpasswd -e 2>/dev/null
+
+	# authorized_keys: rewrite the whole file from the config (idempotent)
+	home="$(awk -F: -v u="$name" '$1 == u { print $6 }' /etc/passwd)"
+	keys="$(indices "users.$i.authorized_keys")"
+	if [ -n "$keys" ] && [ -n "$home" ]; then
+		mkdir -p "$home/.ssh"
+		: > "$home/.ssh/authorized_keys"
+		for k in $keys; do
+			get "users.$i.authorized_keys.$k" >> "$home/.ssh/authorized_keys"
+		done
+		chmod 700 "$home/.ssh"
+		chmod 600 "$home/.ssh/authorized_keys"
+		chown -R "$name" "$home/.ssh" 2>/dev/null
+		log "user $name: authorized_keys installed"
+	fi
+done
+
+# --- services -----------------------------------------------------------------
+# A bounded set of names the provisioner knows, not arbitrary units.
+for i in $(indices services); do
+	svc="$(get "services.$i")"
+	case "$svc" in
+		networking)
+			ip link set lo up 2>/dev/null
+			log "service networking: up"
+			;;
+		*)
+			log "unknown service '$svc' (v1 knows: networking)"
+			;;
+	esac
+done
+
+rm -f "$FLAT"
+log "done."

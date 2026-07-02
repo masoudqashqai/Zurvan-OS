@@ -4,8 +4,10 @@
 hostname, network, users, and services. This is Zurvan's identity —
 *"boots and self-configures from one YAML."*
 
-> Build this **after** the v1 spine boots (milestone 6). The directory is scaffolded now so
-> the design and config shape are pinned down; there's no implementation yet.
+> Implemented as [`zurvan-provision`](zurvan-provision) — busybox `sh` + `awk` only, no
+> other dependencies, so the static-userland story stays intact. `scripts/build.sh`
+> installs it at `/usr/bin/zurvan-provision` and ships `example.yaml` as the default
+> `/etc/zurvan.yaml`.
 
 ## Bounded by design
 
@@ -47,9 +49,12 @@ built.)
 
 ## Implementation notes
 
-- Language is open: a small **C** program keeps the static-binary story clean and is good
-  PID-1-adjacent practice; a busybox-`sh` + `awk` parser is faster to prototype. Don't pull
-  in a YAML library that needs dynamic linking unless you've solved static linking for it.
-- Keep YAML support to the **subset** the keys above need (scalars, simple lists/maps) —
+- **How it works:** an `awk` pass flattens the YAML subset into `KEY=VALUE` paths
+  (`network.eth0.dns.0=10.0.2.3`, `users.0.name=zurvan`), then plain `sh` looks up
+  those paths and applies each section. Two phases, both readable top to bottom.
+- The YAML dialect is a **subset** by design: 2-space indentation, scalars, `- item`
+  lists, nested maps. No anchors, multi-line strings, inline collections, or tabs —
   full YAML is a rabbit hole.
-- Make every action **idempotent** so a re-run (or a failed first run) is safe.
+- Every action is **idempotent** so a re-run (or a failed first run) is safe:
+  existing users are kept, `authorized_keys` and `resolv.conf` are rewritten whole,
+  addresses are flushed before being re-added.
