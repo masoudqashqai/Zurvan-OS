@@ -4,7 +4,17 @@
 > custom PID 1, SSH, and a first-boot YAML provisioner — that boots entirely from RAM
 > and self-configures from a single file.
 
-[![Release](https://img.shields.io/github/v/release/masoudqashqai/Zurvan-OS)](https://github.com/masoudqashqai/Zurvan-OS/releases/latest)
+<p align="center">
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan.iso">
+    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD-zurvan.iso%20(23%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan.iso">
+  </a>
+  &nbsp;
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest">
+    <img src="https://img.shields.io/github/v/release/masoudqashqai/Zurvan-OS?style=for-the-badge&label=RELEASE" alt="Latest release">
+  </a>
+</p>
+
+<p align="center"><em>Download → attach to a VM → boot. No install, no disk — it runs from RAM.</em></p>
 
 Zurvan is a from-source Linux system, not a rebranded distribution. Every layer is
 assembled directly in this repository: the kernel is configured and built from source,
@@ -20,8 +30,8 @@ one YAML file, and vanishing without a trace on shutdown. The disk is never touc
 
 ## Download & run
 
-Grab **`zurvan.iso`** from the [latest release](https://github.com/masoudqashqai/Zurvan-OS/releases/latest)
-(≈23 MB, SHA-256 checksum alongside).
+**[⬇️ zurvan.iso — direct download](https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan.iso)**
+(≈23 MB; the [release page](https://github.com/masoudqashqai/Zurvan-OS/releases/latest) has the SHA-256 checksum).
 
 **VMware Workstation**
 1. *Create a New Virtual Machine* → *I will install the operating system later*
