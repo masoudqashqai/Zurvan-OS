@@ -15,7 +15,10 @@ ip link set lo up 2>/dev/null || ifconfig lo up 2>/dev/null
 # -n: give up if no lease (don't block boot forever); drop it once you trust it.
 if [ -e /sys/class/net/eth0 ]; then
 	ip link set eth0 up 2>/dev/null
-	udhcpc -i eth0 -n -t 5 -T 2 || echo "[rc.init] no DHCP lease on eth0 (continuing)"
+	# -s: busybox's compiled-in default is /usr/share/udhcpc/default.script;
+	# ours lives in /etc, so it must be passed explicitly.
+	udhcpc -i eth0 -n -t 5 -T 2 -s /etc/udhcpc/default.script \
+		|| echo "[rc.init] no DHCP lease on eth0 (continuing)"
 else
 	echo "[rc.init] no eth0 — is VIRTIO_NET in the kernel + -netdev user in QEMU?"
 fi
