@@ -14,7 +14,6 @@
   </a>
 </p>
 
-<p align="center"><em>Download → attach to a VM → boot. No install, no disk — it runs from RAM.</em></p>
 
 Zurvan is a from-source Linux system, not a rebranded distribution. Every layer is
 assembled directly in this repository: the kernel is configured and built from source,
