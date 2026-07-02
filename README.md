@@ -1,143 +1,163 @@
 # Zurvan
 
-> A minimal Linux distribution assembled **from scratch in a git repo** — kernel,
-> userland, a custom PID 1, and networking, built one layer at a time.
+> A minimal Linux distribution assembled from scratch — kernel, static userland, a
+> custom PID 1, SSH, and a first-boot YAML provisioner — that boots entirely from RAM
+> and self-configures from a single file.
 
-Zurvan is a from-source Linux system, not a rebranded distribution. Each layer is
-assembled directly: the kernel is configured and built from source, the userland is
-statically linked, the init process (PID 1) is written in C, and networking is brought
-up explicitly. On top of that spine sits a single signature feature that gives the
-system its identity.
+[![Release](https://img.shields.io/github/v/release/masoudqashqai/Zurvan-OS)](https://github.com/masoudqashqai/Zurvan-OS/releases/latest)
 
-The system boots as an **initramfs under QEMU** — no bootloader, disk image, or GRUB
-required initially. The kernel unpacks the root filesystem into RAM and runs `/init`,
-which keeps the build-and-boot feedback loop to a few seconds.
+Zurvan is a from-source Linux system, not a rebranded distribution. Every layer is
+assembled directly in this repository: the kernel is configured and built from source,
+the userland is statically linked (no dynamic loader ships at all), the init process is
+~200 lines of C you can read top to bottom, and networking is brought up explicitly.
 
-```
-qemu-system-x86_64 -kernel kernel/build/bzImage -initrd build/rootfs.cpio.gz -nographic
-```
-
----
-
-## The name
-
-Named for the Zoroastrian principle of infinite, boundless time — the neutral source from
-which opposing forces emerge. Time is the organizing metaphor throughout the project:
-boot as a timeline, the kernel scheduler, uptime, and the contrast between what endures
-and what is fleeting.
-
-That contrast shapes the design. The source is fixed and timeless — a reproducible image
-defined entirely by this repository — while each running instance is ephemeral, booting
-and configuring itself before returning to a clean state. The system is the boundary
-between the two.
-
-> **Namespace note:** the name (GitHub org, package name, web collisions) has not yet
-> been checked for conflicts. Verify before publishing publicly.
+Named for the Zoroastrian principle of boundless time, the design follows the metaphor:
+the **source is timeless** — a reproducible image defined entirely by this repository —
+while each **running instance is ephemeral**, booting from RAM, configuring itself from
+one YAML file, and vanishing without a trace on shutdown. The disk is never touched.
 
 ---
 
-## Scope
+## Download & run
 
-v1 is deliberately bounded — a system that:
+Grab **`zurvan.iso`** from the [latest release](https://github.com/masoudqashqai/Zurvan-OS/releases/latest)
+(≈23 MB, SHA-256 checksum alongside).
 
-1. Boots a kernel built from source.
-2. Provides a real shell (busybox **and** bash).
-3. Performs basic networking (DHCP + DNS over QEMU's user-mode network).
-4. Self-configures on first boot from a single YAML file — the signature feature.
+**VMware Workstation**
+1. *Create a New Virtual Machine* → *I will install the operating system later*
+2. Guest OS: **Linux → Other Linux 6.x kernel 64-bit**
+3. Attach `zurvan.iso` to the CD/DVD drive → power on
 
-The goal is a complete, working spine rather than an open-ended system. Larger
-subsystems (a custom service manager, a package manager, container duality) are
-**explicitly deferred** and tracked in [`ROADMAP.md`](ROADMAP.md).
-
----
-
-## The v1 spine
-
-| Layer | What | Notes |
-|-------|------|-------|
-| **Kernel** | Built from source, `make defconfig` to start | Needs initramfs, 8250 serial console, devtmpfs, virtio net/pci. See [`kernel/`](kernel/). |
-| **Userland** | busybox, **statically linked**, + bash + dropbear | busybox gives `sh`, `ls`, `mount`, `ip`, `udhcpc`, `vi`, …; dropbear gives `sshd`/`ssh`/`scp`. See [`userland/`](userland/). |
-| **Init / PID 1** | Custom, written in C | Mounts `/proc` `/sys` `/dev`, sets up console, supervises a shell, **reaps zombies, never exits**. See [`init/`](init/). |
-| **Networking** | QEMU user-mode net + `udhcpc` | 10.0.2.0/24 with DHCP + DNS forwarding. See [`rootfs/etc/udhcpc/`](rootfs/etc/udhcpc/). |
-| **Packaging** | `cpio.gz` the rootfs, boot in QEMU | See [`scripts/`](scripts/). |
-
-### Signature feature — first-boot provisioner ("cloud-init-lite")
-
-On boot, read **one YAML file** (from the kernel cmdline or a labeled partition) and
-configure hostname, network, users, and services. Bounded: parse a file, run a defined
-set of actions. This is the distro's identity — *"boots and self-configures from one
-YAML."* Scaffold lives in [`packages/provisioner/`](packages/provisioner/).
-
-### Stretch — immutable root + tmpfs overlay
-
-Read-only root with a tmpfs overlay via overlayfs, so reboot = clean state. Pairs
-naturally with the provisioner: clean root + YAML = reproducible boxes. Deferred until the
-headline feature works; tracked in [`ROADMAP.md`](ROADMAP.md).
-
----
-
-## Repo layout
-
-```
-kernel/      kernel config fragment + build script
-userland/    busybox config + build scripts (busybox, bash)
-init/        PID 1 source (C) + build
-rootfs/      skeleton /etc, /dev rules, udhcpc default.script
-scripts/     build.sh, run-qemu.sh, make-iso.sh
-packages/    signature-feature code (first-boot provisioner)
-Makefile     top-level orchestration
-ROADMAP.md   explicitly deferred features
+**QEMU**
+```sh
+qemu-system-x86_64 -cdrom zurvan.iso -m 256               # VGA window
+qemu-system-x86_64 -cdrom zurvan.iso -m 256 -nographic    # serial; pick the 2nd menu entry
 ```
 
+GRUB boots hands-off after 3 seconds. You land at a root `bash` prompt with the
+hostname, network, users, and services already applied from the built-in
+`/etc/zurvan.yaml`. Reboot and it happens again, identically — clean state every time.
+
 ---
 
-## Build & run
+## What's inside
 
-The whole chain is built and boot-verified (kernel 6.6.143, QEMU, and the ISO in a VM).
-**Kernel config and PID 1 logic are still the parts to reason about yourself** — a subtly
-wrong config or a bad init just panics with no useful message.
+| Layer | Implementation |
+|-------|----------------|
+| **Kernel** | Linux 6.6 LTS, built from source; `defconfig` + a [readable fragment](kernel/config-fragment) of the symbols the boot path needs |
+| **Userland** | [busybox](userland/build-busybox.sh) (static — `sh`, `ls`, `ip`, `udhcpc`, `vi`, …), [bash](userland/build-bash.sh) (static), [dropbear](userland/build-dropbear.sh) (static — `sshd`, `ssh`, `scp`) |
+| **Init (PID 1)** | [~200 lines of C](init/init.c): mounts, console, an rc hook, shell supervision, zombie reaping — and it never exits |
+| **Networking** | `udhcpc` DHCP + DNS via a [small hook script](rootfs/etc/udhcpc/default.script) |
+| **Provisioner** | [`zurvan-provision`](packages/provisioner/) — the signature feature, see below |
+| **Packaging** | initramfs (`cpio.gz`) for QEMU direct-boot; GRUB ISO for VMs and BIOS machines |
+
+### The signature feature: first-boot provisioning from one YAML
+
+On every boot (every boot is a first boot), PID 1's rc hook runs the provisioner, which
+reads **one YAML file** and configures the system:
+
+```yaml
+hostname: zurvan-box
+
+network:
+  eth0:
+    dhcp: false
+    address: 10.0.2.50/24
+    gateway: 10.0.2.2
+    dns:
+      - 10.0.2.3
+
+users:
+  - name: zurvan
+    shell: /bin/bash
+    authorized_keys:
+      - "ssh-ed25519 AAAA... your-key"
+
+services:
+  - networking
+  - ssh
+```
+
+The config comes from `/etc/zurvan.yaml` inside the image, or any path given as
+`zurvan.config=<path>` on the kernel cmdline. The implementation is deliberately
+bounded — busybox `sh` + `awk`, a fixed set of keys, a tiny YAML subset, every action
+idempotent. Details in [`packages/provisioner/`](packages/provisioner/).
+
+To SSH into the box, put your public key in
+[`packages/provisioner/example.yaml`](packages/provisioner/example.yaml) and rebuild the
+image (`make rootfs iso`) — dropbear generates host keys on first connection, so there
+is no key ceremony.
+
+---
+
+## Building from source
+
+Everything builds on any reasonably current Linux with a C toolchain. Debian/Ubuntu
+prerequisites:
+
+```sh
+apt install build-essential flex bison libssl-dev libelf-dev bc cpio curl xz-utils \
+            qemu-system-x86 grub-pc-bin xorriso mtools
+```
+
+Then, from the repo root:
 
 ```sh
 make help          # list targets
-make kernel        # fetch + configure + build the kernel  (kernel/build.sh)
-make userland      # build static busybox, then bash       (userland/*.sh)
-make init          # compile the C PID 1                    (init/)
-make rootfs        # assemble rootfs/ + pack rootfs.cpio.gz (scripts/build.sh)
-make run           # boot the result in QEMU -nographic     (scripts/run-qemu.sh)
-make iso           # GRUB-bootable build/zurvan.iso          (scripts/make-iso.sh)
+make kernel        # fetch + configure + build the kernel   (~30 min first time)
+make userland      # static busybox, bash, dropbear
+make init          # compile the C PID 1
+make rootfs        # assemble and pack rootfs.cpio.gz
+make run           # boot it in QEMU -nographic  (exit: Ctrl-A X)
+make iso           # produce build/zurvan.iso
 ```
 
-Building on Windows: use WSL Ubuntu, and set `ZURVAN_SRC_BASE=/some/ext4/path` so the
-kernel/userland source trees compile on the Linux filesystem instead of `/mnt/*`.
+Useful environment variables:
 
-The ISO boots in **VMware Workstation** (new VM → "Other Linux 6.x 64-bit" → attach
-`build/zurvan.iso`), QEMU (`-cdrom`), or any BIOS machine — same RAM-backed system as
-`make run`; the disk is never touched, so every boot is a clean first boot.
+| Variable | Purpose |
+|----------|---------|
+| `ZURVAN_SRC_BASE` | where kernel/userland source trees live — **on WSL, point this at the Linux filesystem** (e.g. `/root/zurvan-src`); building on `/mnt/*` is ~10× slower |
+| `KMIRROR` | alternate kernel download base if `cdn.kernel.org` is unreachable, e.g. `https://mirrors.tuna.tsinghua.edu.cn/kernel` |
+| `KVER`, `BBVER`, `BASHVER`, `DBVER` | pin different component versions |
+| `USE_C_INIT=0` | build the rootfs with the throwaway shell `/init` instead of the C PID 1 (milestone 2 mode) |
 
-To leave a `-nographic` QEMU session: `Ctrl-A` then `X`.
-
----
-
-## Milestones (suggested order of work)
-
-The boot chain was built bottom-up, confirming each layer before adding the next:
-
-1. ✅ **Kernel boots to a panic** in QEMU (no init yet) — confirms config + serial console.
-2. ✅ **Static busybox rootfs** with a trivial `/init` shell script → boot to a busybox shell.
-3. ✅ **C PID 1** replaces `/init` — mounts, console, reaping, shell supervision.
-4. ✅ **bash** added to the rootfs (static, the supervised shell).
-5. ✅ **Networking** — `udhcpc` + `default.script`; DHCP + DNS verified in QEMU.
-6. ✅ **First-boot YAML provisioner** — the signature feature; verified end to end.
-7. ✅ **Bootable ISO** — GRUB, boots the same system in VMware/QEMU from CD.
-8. *(Stretch)* immutable root + overlay — see `ROADMAP.md`.
-
-All of v1 is **built and boot-verified**. Milestones 1–7 each have a reproducible check:
-the panic message, the shell prompt, `/proc/1/comm`, a DHCP lease + DNS lookup, the
-provisioned hostname/user/network from `/etc/zurvan.yaml`, and the ISO booting to a VGA
-console.
+**Windows:** build under WSL2 (Ubuntu). Clone anywhere, but set `ZURVAN_SRC_BASE` as
+above. The repo enforces LF line endings via `.gitattributes` — a CRLF shell script
+inside the image would break the boot chain.
 
 ---
+
+## Repository layout
+
+```
+kernel/      config fragment + build script
+userland/    busybox, bash, dropbear build scripts (all static)
+init/        PID 1 source (C) + Makefile
+rootfs/      skeleton /etc, rc.init, udhcpc hook
+packages/    the first-boot provisioner (signature feature)
+scripts/     rootfs assembly, QEMU runner, ISO builder
+Makefile     top-level orchestration: kernel → userland → init → rootfs → run/iso
+ROADMAP.md   deliberately deferred features
+```
+
+## Design principles
+
+- **Bounded scope.** Each piece does one thing and is small enough to read whole. The
+  provisioner parses a YAML *subset*; the init supervises *one* shell; features that
+  don't fit are in [`ROADMAP.md`](ROADMAP.md), not half-implemented here.
+- **Verified, not assumed.** Every layer was brought up bottom-up with an observable
+  check: the kernel's no-init panic, the busybox prompt, `/proc/1/comm`, a DHCP lease,
+  a DNS lookup, an SSH session on `/dev/pts/0`.
+- **The parts worth understanding are the parts you must touch.** Kernel config and
+  PID 1 behavior fail without friendly errors — both are kept small and documented so
+  they can be reasoned about rather than trusted.
+
+## Roadmap
+
+Deferred by design, tracked in [`ROADMAP.md`](ROADMAP.md): immutable read-only root with
+a tmpfs overlay, ext4 persistence, a declarative service manager, a package manager,
+and image/container duality.
 
 ## License
 
-TBD before publishing.
+Not yet licensed — treat as all-rights-reserved until a license lands.
