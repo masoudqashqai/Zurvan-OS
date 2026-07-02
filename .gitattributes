@@ -1,0 +1,5 @@
+# Zurvan is a Linux system built from this repo: shell scripts, kernel configs,
+# and rootfs files are consumed by Linux tools (and by the booted OS itself).
+# Force LF in the working tree everywhere, even on Windows checkouts, overriding
+# any core.autocrlf=true — CRLF in a shebang or rc script breaks the boot chain.
+* text=auto eol=lf
