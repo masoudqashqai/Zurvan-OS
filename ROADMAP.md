@@ -42,13 +42,12 @@ below waits until that works end-to-end.
 - Demonstrates that the rootfs is the single source of truth.
 
 ### Graduate to a real distro (off-initramfs)
-The v1 path boots entirely from an initramfs in RAM. To run on real hardware / a VM with
-persistence:
+Partially done: `scripts/make-iso.sh` builds a GRUB ISO (`make iso`) that boots the
+RAM-backed system in VMware/QEMU/BIOS machines. Still deferred — **persistence**:
 
 - Write the rootfs to an **ext4** image.
-- Add **GRUB** (`grub-mkrescue` for a bootable ISO).
-- Boots on real hardware or a VM, with a persistent disk.
-- `scripts/make-iso.sh` is scaffolded for this step but is **not** part of v1.
+- Boots on real hardware or a VM, with a persistent disk (needs SATA/AHCI + ext4 in
+  the kernel config; the current ISO never touches a disk).
 
 ---
 

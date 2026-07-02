@@ -93,10 +93,9 @@ ROADMAP.md   explicitly deferred features
 
 ## Build & run
 
-> ⚠️ Nothing has been booted or tested yet — these are the intended entry points wired up
-> during project init. Treat the build scripts as starting points to read and adapt, not
-> a turnkey pipeline. **Kernel config and PID 1 logic are the parts to reason about
-> yourself** — a subtly wrong config or a bad init just panics with no useful message.
+The whole chain is built and boot-verified (kernel 6.6.143, QEMU, and the ISO in a VM).
+**Kernel config and PID 1 logic are still the parts to reason about yourself** — a subtly
+wrong config or a bad init just panics with no useful message.
 
 ```sh
 make help          # list targets
@@ -105,7 +104,15 @@ make userland      # build static busybox, then bash       (userland/*.sh)
 make init          # compile the C PID 1                    (init/)
 make rootfs        # assemble rootfs/ + pack rootfs.cpio.gz (scripts/build.sh)
 make run           # boot the result in QEMU -nographic     (scripts/run-qemu.sh)
+make iso           # GRUB-bootable build/zurvan.iso          (scripts/make-iso.sh)
 ```
+
+Building on Windows: use WSL Ubuntu, and set `ZURVAN_SRC_BASE=/some/ext4/path` so the
+kernel/userland source trees compile on the Linux filesystem instead of `/mnt/*`.
+
+The ISO boots in **VMware Workstation** (new VM → "Other Linux 6.x 64-bit" → attach
+`build/zurvan.iso`), QEMU (`-cdrom`), or any BIOS machine — same RAM-backed system as
+`make run`; the disk is never touched, so every boot is a clean first boot.
 
 To leave a `-nographic` QEMU session: `Ctrl-A` then `X`.
 
@@ -113,18 +120,21 @@ To leave a `-nographic` QEMU session: `Ctrl-A` then `X`.
 
 ## Milestones (suggested order of work)
 
-The boot chain is built bottom-up, confirming each layer before adding the next:
+The boot chain was built bottom-up, confirming each layer before adding the next:
 
-1. **Kernel boots to a panic** in QEMU (no init yet) — confirms config + serial console.
-2. **Static busybox rootfs** with a trivial `/init` shell script → boot to a busybox shell.
-3. **C PID 1** replaces `/init` — mounts, console, reaping, exec shell.
-4. **bash** added to the rootfs.
-5. **Networking** — `udhcpc` + `default.script`, confirm DHCP + DNS in QEMU.
-6. **First-boot YAML provisioner** — the signature feature.
-7. *(Stretch)* immutable root + overlay.
+1. ✅ **Kernel boots to a panic** in QEMU (no init yet) — confirms config + serial console.
+2. ✅ **Static busybox rootfs** with a trivial `/init` shell script → boot to a busybox shell.
+3. ✅ **C PID 1** replaces `/init` — mounts, console, reaping, shell supervision.
+4. ✅ **bash** added to the rootfs (static, the supervised shell).
+5. ✅ **Networking** — `udhcpc` + `default.script`; DHCP + DNS verified in QEMU.
+6. ✅ **First-boot YAML provisioner** — the signature feature; verified end to end.
+7. ✅ **Bootable ISO** — GRUB, boots the same system in VMware/QEMU from CD.
+8. *(Stretch)* immutable root + overlay — see `ROADMAP.md`.
 
-The current state of the repo is **step 0**: project skeleton, scripts, and docs in
-place. No layer has been built or booted yet.
+All of v1 is **built and boot-verified**. Milestones 1–7 each have a reproducible check:
+the panic message, the shell prompt, `/proc/1/comm`, a DHCP lease + DNS lookup, the
+provisioned hostname/user/network from `/etc/zurvan.yaml`, and the ISO booting to a VGA
+console.
 
 ---
 
