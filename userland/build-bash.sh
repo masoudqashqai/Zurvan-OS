@@ -37,7 +37,12 @@ cd "$SRC_DIR"
 # --enable-static-link asks bash's build to link statically.
 # CC can be overridden to musl-gcc for a cleaner static build.
 echo ">> configuring bash (static)"
-CC="${CC:-cc}" ./configure \
+# GCC >= 14 compatibility for bash 5.2's K&R-era C:
+#   -std=gnu17                            C23 turns empty-parameter declarations
+#                                         (e.g. xmalloc) into hard errors
+#   -Wno-implicit-function-declaration    the bundled termcap calls write()
+#                                         without declaring it, error by default
+CC="${CC:-cc}" CFLAGS="${CFLAGS:--g -O2 -std=gnu17 -Wno-implicit-function-declaration}" ./configure \
 	--without-bash-malloc \
 	--enable-static-link
 

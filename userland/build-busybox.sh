@@ -47,6 +47,12 @@ fi
 echo ">> enabling CONFIG_STATIC"
 sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config || true
 grep -q '^CONFIG_STATIC=y' .config || echo 'CONFIG_STATIC=y' >> .config
+
+# busybox 1.36's tc applet doesn't compile against kernel headers >= 6.8
+# (CBQ qdisc definitions were removed). We don't ship traffic control.
+echo ">> disabling CONFIG_TC"
+sed -i 's/^CONFIG_TC=y/# CONFIG_TC is not set/' .config
+
 make oldconfig
 
 # --- build ------------------------------------------------------------------
