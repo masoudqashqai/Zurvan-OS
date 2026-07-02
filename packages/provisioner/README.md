@@ -45,7 +45,7 @@ built.)
 | `hostname` | write `/etc/hostname` + `sethostname()` |
 | `network`  | static IP or `dhcp` per interface (otherwise udhcpc already ran) |
 | `users`    | create users, set shells, install `authorized_keys` / passwords |
-| `services` | start a defined set of services (enable/start) |
+| `services` | start a defined set of services — v1 knows `networking` and `ssh` (dropbear) |
 
 ## Implementation notes
 

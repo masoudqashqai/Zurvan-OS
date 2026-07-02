@@ -178,8 +178,22 @@ for i in $(indices services); do
 			ip link set lo up 2>/dev/null
 			log "service networking: up"
 			;;
+		ssh)
+			# dropbear: -R generates host keys in /etc/dropbear on first
+			# connection, so a fresh RAM boot needs no key ceremony.
+			if command -v dropbear >/dev/null 2>&1; then
+				mkdir -p /etc/dropbear
+				if pgrep dropbear >/dev/null 2>&1; then
+					log "service ssh: already running"
+				else
+					dropbear -R && log "service ssh: dropbear up (port 22)"
+				fi
+			else
+				log "service ssh: dropbear not in this image"
+			fi
+			;;
 		*)
-			log "unknown service '$svc' (v1 knows: networking)"
+			log "unknown service '$svc' (v1 knows: networking, ssh)"
 			;;
 	esac
 done

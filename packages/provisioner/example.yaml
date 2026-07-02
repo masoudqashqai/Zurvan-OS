@@ -28,3 +28,4 @@ users:
 services:
   # names the provisioner knows how to start; bounded set, not arbitrary units
   - networking
+  - ssh

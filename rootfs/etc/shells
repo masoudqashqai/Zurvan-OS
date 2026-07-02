@@ -1,0 +1,5 @@
+# Valid login shells. dropbear refuses logins for accounts whose shell is not
+# listed here (glibc getusershell() falls back to only sh/csh without this file).
+/bin/sh
+/bin/ash
+/bin/bash

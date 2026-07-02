@@ -78,6 +78,9 @@ static void early_mounts(void)
 	/* devtmpfs: the kernel populates /dev for us (CONFIG_DEVTMPFS_MOUNT can
 	 * also do this automatically, but mounting here keeps init self-contained). */
 	do_mount("devtmpfs", "/dev",  "devtmpfs", 0);
+	/* devpts: pseudo-terminals — sshd (dropbear) can't open a session
+	 * without it. Must come after /dev so the mount point can be created. */
+	do_mount("devpts",   "/dev/pts", "devpts", 0);
 }
 
 /* Point stdin/stdout/stderr at the console so the shell has a terminal. */

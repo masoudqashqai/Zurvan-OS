@@ -56,7 +56,7 @@ subsystems (a custom service manager, a package manager, container duality) are
 | Layer | What | Notes |
 |-------|------|-------|
 | **Kernel** | Built from source, `make defconfig` to start | Needs initramfs, 8250 serial console, devtmpfs, virtio net/pci. See [`kernel/`](kernel/). |
-| **Userland** | busybox, **statically linked**, + bash on top | One binary gives `sh`, `ls`, `mount`, `ip`, `udhcpc`, `vi`, … See [`userland/`](userland/). |
+| **Userland** | busybox, **statically linked**, + bash + dropbear | busybox gives `sh`, `ls`, `mount`, `ip`, `udhcpc`, `vi`, …; dropbear gives `sshd`/`ssh`/`scp`. See [`userland/`](userland/). |
 | **Init / PID 1** | Custom, written in C | Mounts `/proc` `/sys` `/dev`, sets up console, supervises a shell, **reaps zombies, never exits**. See [`init/`](init/). |
 | **Networking** | QEMU user-mode net + `udhcpc` | 10.0.2.0/24 with DHCP + DNS forwarding. See [`rootfs/etc/udhcpc/`](rootfs/etc/udhcpc/). |
 | **Packaging** | `cpio.gz` the rootfs, boot in QEMU | See [`scripts/`](scripts/). |

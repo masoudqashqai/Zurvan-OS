@@ -30,10 +30,15 @@ rm -rf "$ROOTFS_OUT"
 mkdir -p "$ROOTFS_OUT"
 
 # --- directory skeleton -----------------------------------------------------
-for d in bin sbin etc home proc sys dev tmp root run var/lib usr/bin usr/sbin; do
+for d in bin sbin etc home proc sys dev tmp root run var/lib var/log var/run usr/bin usr/sbin; do
 	mkdir -p "$ROOTFS_OUT/$d"
 done
 chmod 1777 "$ROOTFS_OUT/tmp"
+
+# Login accounting: dropbear (and `who`) expect these to exist; glibc's
+# login()/logout() error out — killing the SSH session child — without them.
+: > "$ROOTFS_OUT/var/run/utmp"
+: > "$ROOTFS_OUT/var/log/wtmp"
 
 # --- skeleton /etc and friends ----------------------------------------------
 cp -a "$HERE/rootfs/etc" "$ROOTFS_OUT/"
@@ -59,6 +64,21 @@ if [ -x "$BASH_BIN" ]; then
 	cp "$BASH_BIN" "$ROOTFS_OUT/bin/bash"
 else
 	echo "!! no bash at $BASH_BIN — shell will fall back to busybox sh" >&2
+fi
+
+# --- dropbear (SSH server + client) -------------------------------------------
+# Multi-call binary, same pattern as busybox. Host keys are generated at first
+# connection (dropbear -R) into /etc/dropbear.
+DROPBEAR="$HERE/userland/build/dropbearmulti"
+if [ -x "$DROPBEAR" ]; then
+	cp "$DROPBEAR" "$ROOTFS_OUT/bin/dropbearmulti"
+	for applet in dropbear dropbearkey scp; do
+		ln -sf /bin/dropbearmulti "$ROOTFS_OUT/bin/$applet"
+	done
+	ln -sf /bin/dropbearmulti "$ROOTFS_OUT/bin/ssh"   # dbclient answers to "ssh"
+	mkdir -p "$ROOTFS_OUT/etc/dropbear"
+else
+	echo "!! no dropbearmulti at $DROPBEAR — image ships without SSH" >&2
 fi
 
 # --- first-boot provisioner (the signature feature) --------------------------
