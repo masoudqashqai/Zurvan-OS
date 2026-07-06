@@ -18,25 +18,23 @@ here — it belongs in `ROADMAP.md`.
 
 ## Where the config comes from
 
-Two intended sources (pick one to start; cmdline is simplest under QEMU):
+In order:
 
 1. **Kernel cmdline** — `zurvan.config=/path/to/zurvan.yaml`, parsed from `/proc/cmdline`.
-2. **A labeled partition** — mount by label and read a well-known filename. (Pairs with
-   the immutable-root stretch goal: read-only root + a small config partition.)
+2. **The persistent disk** — `/data/zurvan.yaml`, when `rc.init` mounted a `ZURVAN-DATA`
+   partition (v2). `zurvan-install` seeds this copy; after that, *this file is the box*.
+3. **Baked into the image** — `/etc/zurvan.yaml` (ships as [`example.yaml`](example.yaml)).
 
 ## How it runs
 
-`/etc/rc.init` (run once by the C PID 1) invokes the provisioner on first boot only,
-guarded by a marker file so it doesn't re-run every boot:
+`/etc/rc.init` (run by the C PID 1) invokes the provisioner once per boot, guarded by a
+marker file. The marker lives on the RAM root **on purpose**: the root is reborn on every
+boot, so the YAML is reapplied fresh each time — a Zurvan box's configuration is always
+`image + one YAML`, never accumulated state. Idempotency makes reapplication safe.
 
-```sh
-if [ -x /usr/bin/zurvan-provision ] && [ ! -e /var/lib/zurvan/provisioned ]; then
-    /usr/bin/zurvan-provision && : > /var/lib/zurvan/provisioned
-fi
-```
-
-(That block is present, commented out, in `rootfs/etc/rc.init` — enable it once this is
-built.)
+With a persistent `/data`, the `ssh` service also moves dropbear's host keys there
+(via an `/etc/dropbear` symlink), so the box keeps one SSH fingerprint for life while
+the OS stays disposable.
 
 ## Supported actions (v1 target)
 

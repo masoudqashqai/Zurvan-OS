@@ -24,7 +24,11 @@ before it works end-to-end.
 
 ---
 
-## Milestone 1 — the memory box: persistent `/data` + installable apps
+## Milestone 1 — the memory box: persistent `/data` + installable apps ✅
+
+**Done (2026-07-06).** Boot-verified end to end in QEMU: install to a blank disk from
+the CD, reboot with hostname + SSH fingerprint + installed app intact, and a byte-copied
+disk boots as a provably identical second server.
 
 Give the system one notebook that survives reboot, and an official answer to
 "how do I install Apache on this?"
