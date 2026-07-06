@@ -73,6 +73,15 @@ grub-mkimage -O i386-pc -o "$STAGE/install/core.img" \
 	biosdisk part_msdos ext2
 cp "$GRUB_LIB/boot.img" "$STAGE/install/boot.img"
 
+# --- catalog packages (v2 milestone 2) ------------------------------------------
+# Ship whatever `make catalog` built; zurvan-install copies them onto /data so
+# a freshly installed box can `zurvan-pkg install /data/<pkg>.tar.gz` offline.
+if ls "$BUILD"/catalog/*.tar.gz >/dev/null 2>&1; then
+	mkdir -p "$STAGE/catalog"
+	cp "$BUILD"/catalog/*.tar.gz "$STAGE/catalog/"
+	echo ">> catalog packages on ISO: $(ls "$BUILD"/catalog/*.tar.gz | wc -l)"
+fi
+
 # --- build --------------------------------------------------------------------
 echo ">> grub-mkrescue -> $ISO"
 grub-mkrescue -o "$ISO" "$STAGE"

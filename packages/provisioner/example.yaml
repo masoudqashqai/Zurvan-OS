@@ -10,12 +10,13 @@ hostname: zurvan-box
 
 network:
   eth0:
-    # "dhcp" (default in QEMU) or a static block:
-    dhcp: false
-    address: 10.0.2.50/24
-    gateway: 10.0.2.2
-    dns:
-      - 10.0.2.3
+    # DHCP works under QEMU user-net AND VMware NAT alike. For a static
+    # address, set dhcp: false and uncomment (these are QEMU's subnet):
+    dhcp: true
+    # address: 10.0.2.50/24
+    # gateway: 10.0.2.2
+    # dns:
+    #   - 10.0.2.3
 
 users:
   - name: zurvan
