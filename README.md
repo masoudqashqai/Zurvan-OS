@@ -20,10 +20,18 @@ assembled directly in this repository: the kernel is configured and built from s
 the userland is statically linked (no dynamic loader ships at all), the init process is
 ~200 lines of C you can read top to bottom, and networking is brought up explicitly.
 
-Named for the Zoroastrian principle of boundless time, the design follows the metaphor:
-the **source is timeless** — a reproducible image defined entirely by this repository —
-while each **running instance is ephemeral**, booting from RAM, configuring itself from
-one YAML file, and vanishing without a trace on shutdown. The disk is never touched.
+Named for the Zoroastrian principle of boundless time — the father of twin opposites —
+the design follows the metaphor: the **source is timeless**, a reproducible image defined
+entirely by this repository, while each **running instance is ephemeral**, booting from
+RAM, configuring itself from one YAML file, and vanishing without a trace on shutdown.
+The disk is never touched.
+
+v2 (planned in [`ROADMAP.md`](ROADMAP.md)) gives Zurvan its twins. The **snake** is the
+OS itself, shedding its skin on every boot — reborn identical, never drifting, exactly as
+above. The **lion** is what endures: one persistent `/data` partition holding the YAML,
+installed apps, and service state, guarded by a snapshot daemon. The OS is never
+installed — only the data is — so a two-year-old Zurvan server stays provably identical
+to the day it was set up.
 
 ---
 
@@ -163,9 +171,12 @@ ROADMAP.md   deliberately deferred features
 
 ## Roadmap
 
-Deferred by design, tracked in [`ROADMAP.md`](ROADMAP.md): immutable read-only root with
-a tmpfs overlay, ext4 persistence, a declarative service manager, a package manager,
-and image/container duality.
+The road to v2 is sequenced in [`ROADMAP.md`](ROADMAP.md) as five bounded milestones:
+a persistent `/data` partition with installable static packages (the memory box), a
+tiny declarative service supervisor, **lion** (a snapshot daemon guarding `/data`),
+**snake** (a job runner in evaporating tmpfs sandboxes), and an optional web admin
+panel. Beyond v2: overlayfs-enforced immutable root, image/container duality, and A/B
+image slots.
 
 ## License
 
