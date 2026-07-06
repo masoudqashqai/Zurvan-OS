@@ -171,12 +171,13 @@ ROADMAP.md   deliberately deferred features
 
 ## Roadmap
 
-The road to v2 is sequenced in [`ROADMAP.md`](ROADMAP.md) as five bounded milestones:
-a persistent `/data` partition with installable static packages (the memory box), a
-tiny declarative service supervisor, **lion** (a snapshot daemon guarding `/data`),
-**snake** (a job runner in evaporating tmpfs sandboxes), and an optional web admin
-panel. Beyond v2: overlayfs-enforced immutable root, image/container duality, and A/B
-image slots.
+The road to v2 is sequenced in [`ROADMAP.md`](ROADMAP.md) as six bounded milestones:
+a persistent `/data` partition with installable static packages (the memory box — done),
+a tiny declarative service supervisor, **the seal** (verified boot: signed images,
+A/B slots with automatic rollback, enforced read-only root, hardening baseline),
+**lion** (a snapshot daemon guarding `/data`), **snake** (a job runner in evaporating
+tmpfs sandboxes), and an optional web admin panel. Beyond v2: image/container duality,
+TPM-sealed keys, and a Microsoft-signed shim.
 
 ## License
 

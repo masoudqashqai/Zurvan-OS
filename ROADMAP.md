@@ -98,7 +98,72 @@ and killing either gets it restarted within seconds.
 
 ---
 
-## Milestone 3 — the lion: guardian of `/data`
+## Milestone 3 — the seal: a boot chain you can trust
+
+M1 made the machine *three artifacts*: image + YAML + `/data`. Right now every
+link in the boot chain — MBR → GRUB → kernel → image — **trusts** the previous
+link; nothing **verifies** anything. Anyone who can write the disk (physical
+access, the hypervisor, or root on the box) can swap the image and own the next
+boot. The consistency story is already strong; this milestone makes it a
+*security* story. It sits **before** the lion, the snake, and the face on
+purpose: real data, arbitrary jobs, and a network-facing panel all deserve a
+verified base — and the hardening switches land in the supervisor M2 just built.
+
+The architecture makes this unusually cheap: verifying one sealed image file is
+one signature check, not a million mutable files.
+
+**Verified boot (the seal itself)**
+- The build signs `bzImage`, `initrd.img`, and `grub.cfg` (GPG, detached
+  signatures). `core.img` embeds the public key and sets
+  `check_signatures=enforce` — GRUB refuses to load anything tampered.
+- Honest residual risk, documented: on BIOS/MBR, `core.img` itself is the
+  unverified root of trust. Fixing that needs firmware help:
+- **UEFI boot** for the ISO and installer (ESP partition + `x86_64-efi` GRUB) —
+  needed on modern hardware anyway — with **Secure Boot via user-enrolled keys**
+  (VMware custom key db / physical firmware enrollment). Then the firmware
+  verifies GRUB, GRUB verifies the image, and the chain is rooted in hardware.
+- **Rabbit-hole warning:** no Microsoft-signed shim, no TPM sealing, no
+  attestation. Enroll-your-own-key is the whole v2 story; the MS-shim path is
+  a distribution problem, not an architecture problem.
+
+**A/B image slots + `zurvan-upgrade`** (promoted from the deferred list — an
+unverified upgrade path would undo the seal)
+- Two image slots on the boot partition. `zurvan-upgrade <file>`: verify the
+  signature *first*, write to the inactive slot (temp name + rename — a power
+  cut never leaves a torn image), flip one GRUB env variable, reboot.
+- A boot-success counter in grubenv: a slot that fails to boot cleanly gets
+  one retry, then GRUB falls back to the good slot. Rollback is automatic.
+- Upgrading is still "replacing one file" — now with a signature gate and an
+  undo button.
+
+**Enforced immutability** (promoted from the deferred list)
+- The RAM root goes read-only for real: root mounted `ro` with a tmpfs overlay
+  for the paths that legitimately churn. Writing anywhere permanent except
+  `/data` returns `EROFS` instead of relying on good manners.
+
+**Hardening baseline (today's table stakes, each one line to review)**
+- Kernel fragment: `STACKPROTECTOR_STRONG`, `HARDENED_USERCOPY`,
+  `SLAB_FREELIST_HARDENED`, no `/dev/mem`, `dmesg_restrict`, `kptr_restrict`,
+  unprivileged BPF off. No modules ship at all — everything is built in, so
+  the module-loading attack surface simply does not exist.
+- Services run as **dedicated non-root users** with `no_new_privs` — a
+  `user:` line in the service definition, applied by `zurvan-svc`.
+- dropbear defaults to **key-only auth**; password login must be asked for
+  explicitly in the YAML.
+- *(stretch)* LUKS-encrypted `/data`, opt-in via the YAML. **Rabbit-hole
+  warning:** key management on a headless box is the actual hard problem —
+  passphrase-at-console only; TPM unsealing is post-v2. A hypervisor's own
+  disk encryption is a legitimate answer today.
+
+*Done when:* flipping one byte in `initrd.img` makes the box refuse to boot it
+(and fall back to the good slot); a signed upgrade applied over SSH survives a
+mid-write power cut; an unsigned image is rejected before touching a slot;
+`touch /usr/bin/x` fails with `EROFS` while `/data` still writes; and SSH
+refuses password auth unless the YAML asked for it.
+
+---
+
+## Milestone 4 — the lion: guardian of `/data`
 
 A small C daemon whose only job is protecting the memory box. It runs as an
 ordinary supervised service.
@@ -134,7 +199,7 @@ rather than fail.
 
 ---
 
-## Milestone 4 — the snake: work that leaves no trace
+## Milestone 5 — the snake: work that leaves no trace
 
 The mirror twin: where the lion makes things permanent, the snake makes work
 perfectly disposable.
@@ -151,21 +216,22 @@ perfectly disposable.
 - **Rabbit-hole warning:** this is not a container runtime. Mount namespace +
   tmpfs + timeout is the whole isolation story in v2; no images, no networking
   namespaces, no OCI.
-- Milestones 3 and 4 are independent — build them in either order, or in parallel.
+- Milestones 4 and 5 are independent — build them in either order, or in parallel.
 
 *Done when:* a job that writes garbage all over its filesystem finishes, its
 output comes back, and the running system shows no trace it ever ran.
 
 ---
 
-## Milestone 5 — the face: a web admin panel (the victory lap)
+## Milestone 6 — the face: a web admin panel (the victory lap)
 
 **Not necessary — and that's the point of putting it last.** Everything the panel
 does is already possible over SSH with `vi` and one YAML file, so v2 can ship
-after milestone 4 with nothing missing. Build this because a server's face is a
+after milestone 5 with nothing missing. Build this because a server's face is a
 browser tab, and one screenshot of it sells the project better than any paragraph.
 
-- One static binary serving one page over HTTP on `/data`-configured settings:
+- One static binary serving one page over HTTPS (the seal's signing key story
+  gives it a certificate story too) on `/data`-configured settings:
   services and their supervisor state, the lion's snapshots (restore button), the
   snake's job history, and an editor for `zurvan.yaml` with an "apply on reboot"
   story.
@@ -182,25 +248,30 @@ and edit the YAML — with the panel itself installed like any other package.
 ## Sequencing
 
 ```
-M1 memory box  →  M2 supervisor  →  M3 lion ─┐
-                                   M4 snake ─┴→  M5 face (optional)
+M1 memory box ✅ →  M2 supervisor  →  M3 seal  →  M4 lion  ─┐
+                                                 M5 snake ─┴→  M6 face (optional)
 ```
 
-M1 and M2 are load-bearing and ordered (the lion needs `/data` to guard; lion and
-snake run as supervised services). M3 and M4 swap freely. M5 is a victory lap.
+M1–M3 are load-bearing and ordered: the seal's service hardening lands in the
+supervisor, and everything after the seal — data worth stealing, arbitrary jobs,
+a network-facing panel — runs on the verified base. M4 and M5 swap freely.
+M6 is a victory lap.
 
 ---
 
 ## Still deferred beyond v2
 
-- **Immutable read-only root + tmpfs overlay** — v2 gets most of the value from
-  the RAM-backed root + persistent `/data` split; enforcing read-only-ness with
-  overlayfs remains a good hardening exercise for later.
 - **Image / container duality** — one rootfs producing both a bootable image and
   an OCI container.
 - **Grandfather-father-son snapshot retention** for the lion.
-- **A/B image slots** — two image copies on disk with atomic switch + rollback,
-  the natural end-state of "upgrading is replacing one file."
+- **Microsoft-signed shim** — Secure Boot on machines where you can't enroll
+  your own keys. A distribution/signing-ceremony problem, not a code problem.
+- **TPM-sealed keys** — unlock an encrypted `/data` without a console
+  passphrase; measured boot / attestation live here too.
+
+(Immutable read-only root and A/B image slots used to live on this list — the
+seal milestone absorbed them, since enforcement and safe upgrades are security
+features once the chain is verified.)
 
 ## Explicitly *not* changing in v2
 
