@@ -1,0 +1,50 @@
+#!/bin/sh
+# zurvan-grubenv — read/write GRUB's environment block without grub tooling.
+#
+#   zurvan-grubenv FILE get KEY
+#   zurvan-grubenv FILE set KEY=VALUE [KEY=VALUE...]
+#
+# The block is exactly 1024 bytes: a header line, "key=value" lines, and '#'
+# padding. GRUB writes it in place (save_env) and so do we — `set` rewrites
+# the single block with dd conv=notrunc, which on ext4 is one sector: there
+# is no torn state a power cut can leave that GRUB would misread as a valid
+# but wrong value.
+#
+# This file is the deliberately-unsigned part of the seal: it only chooses
+# WHICH signed slot boots (active/ab_try), so tampering with it can at worst
+# boot the other signed image.
+set -eu
+
+FILE="${1:-}"; CMD="${2:-}"
+[ -n "$FILE" ] && [ -n "$CMD" ] || { echo "usage: zurvan-grubenv FILE get KEY | set K=V..." >&2; exit 1; }
+[ -f "$FILE" ] || { echo "zurvan-grubenv: no such file: $FILE" >&2; exit 1; }
+shift 2
+
+case "$CMD" in
+get)
+	key="${1:?get needs a KEY}"
+	head -c 1024 "$FILE" | awk -F= -v k="$key" \
+		'/^#/ { next } $1 == k { sub(/^[^=]*=/, ""); print; exit }'
+	;;
+set)
+	# current pairs -> tmp, apply overrides, re-pad to exactly 1024.
+	tmp="/tmp/grubenv.$$"
+	head -c 1024 "$FILE" | awk -F= '/^#/ { next } NF >= 2 { print }' > "$tmp.keys"
+	for kv in "$@"; do
+		k="${kv%%=*}"
+		grep -v "^$k=" "$tmp.keys" > "$tmp.keys2" || true
+		mv "$tmp.keys2" "$tmp.keys"
+		echo "$kv" >> "$tmp.keys"
+	done
+	{
+		printf '# GRUB Environment Block\n'
+		cat "$tmp.keys"
+		printf '%01024d' 0 | tr '0' '#'
+	} | head -c 1024 > "$tmp"
+	dd if="$tmp" of="$FILE" bs=1024 count=1 conv=notrunc 2>/dev/null
+	rm -f "$tmp" "$tmp.keys"
+	;;
+*)
+	echo "zurvan-grubenv: unknown command '$CMD'" >&2; exit 1
+	;;
+esac

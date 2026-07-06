@@ -16,9 +16,16 @@ userland/busybox-*/
 userland/bash-*/
 userland/*.tar.*
 
-# Compiled init
+# Compiled init + supervisor
 init/init
 init/*.o
+svc/zurvan-svc
+svc/*.o
+
+# Image-signing keys (v2 M3 "the seal") — NEVER commit the private key.
+# scripts/make-keys.sh regenerates the pair; losing it only means re-keying
+# your boxes with a new install.
+/keys/
 
 # Editor / OS noise
 *.swp

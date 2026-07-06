@@ -111,6 +111,16 @@ chmod +x "$ROOTFS_OUT/sbin/zurvan-install"
 cp "$HERE/packages/pkgtool/zurvan-pkg" "$ROOTFS_OUT/sbin/zurvan-pkg"
 chmod +x "$ROOTFS_OUT/sbin/zurvan-pkg"
 
+# --- the seal: grubenv tool + signing public key (v2 milestone 3) --------------
+cp "$HERE/packages/upgrade/zurvan-grubenv" "$ROOTFS_OUT/sbin/zurvan-grubenv"
+chmod +x "$ROOTFS_OUT/sbin/zurvan-grubenv"
+# The PUBLIC key rides in the image so the box can verify upgrade bundles.
+if [ -f "$HERE/keys/zurvan-signing.pub" ]; then
+	cp "$HERE/keys/zurvan-signing.pub" "$ROOTFS_OUT/etc/zurvan-signing.pub"
+else
+	echo "!! no keys/zurvan-signing.pub — image can't verify upgrades (run scripts/make-keys.sh)" >&2
+fi
+
 # --- zurvan-svc: the service supervisor (v2 milestone 2) -----------------------
 SVC_BIN="$HERE/svc/zurvan-svc"
 if [ ! -x "$SVC_BIN" ]; then

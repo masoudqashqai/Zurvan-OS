@@ -84,11 +84,17 @@ log "install media: $CDDEV"
 [ "$CDDEV" = "$DISK" ] && fail "target disk is the install CD"
 
 # --- partition -----------------------------------------------------------------
-# busybox fdisk, script-driven: new DOS table, p1 = ${BOOT_MB}M (bootable),
-# p2 = rest of the disk.
-log "partitioning $DISK (p1 boot ${BOOT_MB}M, p2 data = rest)"
-printf 'o\nn\np\n1\n\n+%sM\nn\np\n2\n\n\na\n1\nw\n' "$BOOT_MB" \
-	| fdisk "$DISK" >/dev/null 2>&1 || true   # fdisk exits 1 on the re-read ioctl even on success
+# busybox fdisk, script-driven in SECTOR units: new DOS table, p1 starting at
+# sector 2048 (NOT the legacy 63 — GRUB's core.img lives in the gap between
+# the MBR and p1, and the signature-verifying core is ~85K; a 63-sector gap
+# fits 31K and the overflow silently shreds the filesystem), p1 = ${BOOT_MB}M
+# bootable, p2 = rest of the disk.
+log "partitioning $DISK (p1 boot ${BOOT_MB}M @2048, p2 data = rest)"
+# p2 needs an EXPLICIT first sector: once p1 starts at 2048, busybox fdisk
+# offers the now-free 1..2047 gap as p2's default start and would put p2 there.
+P2_START=$(( 2048 + BOOT_MB * 2048 ))
+printf 'o\nn\np\n1\n2048\n+%sM\nn\np\n2\n%s\n\na\n1\nw\n' "$BOOT_MB" "$P2_START" \
+	| fdisk -u "$DISK" >/dev/null 2>&1 || true   # fdisk exits 1 on the re-read ioctl even on success
 sleep 1
 [ -b "${PART}1" ] && [ -b "${PART}2" ] || fail "partitions did not appear (${PART}1/${PART}2)"
 
@@ -97,37 +103,31 @@ log "mkfs.ext4 ${PART}1 (ZURVAN-BOOT) + ${PART}2 (ZURVAN-DATA)"
 mkfs.ext4 -q -F -L ZURVAN-BOOT "${PART}1"
 mkfs.ext4 -q -F -L ZURVAN-DATA "${PART}2"
 
-# --- boot partition: kernel + initrd + GRUB ------------------------------------
-log "copying kernel, initrd, and GRUB modules to ${PART}1"
+# --- boot partition: A/B slots + signed GRUB (v2 milestone 3) -------------------
+# Layout:
+#   /boot/grub/           grub.cfg(+.sig, build-time signed), grubenv, modules(+.sigs)
+#   /boot/slot-a/         bzImage(+.sig), initrd.img(+.sig)  <- this install
+#   /boot/slot-b/         empty until the first zurvan-upgrade
+# GRUB's core embeds the signing public key: everything it reads from here
+# must carry a valid signature or the boot falls back / stops.
+log "copying signed kernel, initrd, and GRUB to ${PART}1 (slot a)"
 mkdir -p "$TGT"
 mount -t ext4 "${PART}1" "$TGT"
-mkdir -p "$TGT/boot/grub/i386-pc"
-cp "$CDMNT/boot/bzImage"    "$TGT/boot/bzImage"
-cp "$CDMNT/boot/initrd.img" "$TGT/boot/initrd.img"
-# normal.mod & friends — core.img loads these from (hd0,msdos1)/boot/grub
-cp "$CDMNT"/boot/grub/i386-pc/*.mod "$TGT/boot/grub/i386-pc/" 2>/dev/null || true
-cp "$CDMNT"/boot/grub/i386-pc/*.lst "$TGT/boot/grub/i386-pc/" 2>/dev/null || true
+mkdir -p "$TGT/boot/grub/i386-pc" "$TGT/boot/slot-a" "$TGT/boot/slot-b"
+for f in bzImage bzImage.sig initrd.img initrd.img.sig; do
+	cp "$CDMNT/boot/$f" "$TGT/boot/slot-a/$f" \
+		|| fail "install media has no $f — built without signing? (make-keys + make iso)"
+done
+cp "$CDMNT/install/grub-disk.cfg"     "$TGT/boot/grub/grub.cfg"
+cp "$CDMNT/install/grub-disk.cfg.sig" "$TGT/boot/grub/grub.cfg.sig"
+cp "$CDMNT"/install/i386-pc/*         "$TGT/boot/grub/i386-pc/"
 
-# Same two entries as the ISO: VGA first (VMware / real hardware), serial for
-# headless QEMU.
-cat > "$TGT/boot/grub/grub.cfg" <<'CFG'
-serial --unit=0 --speed=115200
-terminal_input console serial
-terminal_output console serial
-
-set default=0
-set timeout=3
-
-menuentry "Zurvan" {
-	linux  /boot/bzImage console=tty0
-	initrd /boot/initrd.img
-}
-
-menuentry "Zurvan (serial console)" {
-	linux  /boot/bzImage console=ttyS0
-	initrd /boot/initrd.img
-}
-CFG
+# grubenv: the ONE deliberately unsigned file — it only selects which signed
+# slot boots. 1024-byte fixed block, '#'-padded.
+{
+	printf '# GRUB Environment Block\nactive=a\nab_try=0\n'
+	printf '%01024d' 0 | tr '0' '#'
+} | head -c 1024 > "$TGT/boot/grub/grubenv"
 
 # --- data partition: the memory box ---------------------------------------------
 # Seed /data with the skeleton and the YAML the image would otherwise bake in;

@@ -79,4 +79,32 @@ if [ -x /usr/bin/zurvan-provision ] && [ ! -e /var/lib/zurvan/provisioned ]; the
 		&& mkdir -p /var/lib/zurvan && : > /var/lib/zurvan/provisioned
 fi
 
+# --- A/B slot commit (v2 milestone 3) -----------------------------------------
+# Reaching this line means the slot we booted from is healthy. If it was a
+# trial boot (fresh upgrade) — or the env somehow disagrees with reality —
+# commit this slot as active. A slot that panics never gets here, its trial
+# token is already spent (GRUB's save_env), and the next boot goes back.
+SLOT=""
+for word in $(cat /proc/cmdline); do
+	case "$word" in zurvan.slot=*) SLOT="${word#zurvan.slot=}" ;; esac
+done
+if [ -n "$SLOT" ] && command -v zurvan-grubenv >/dev/null 2>&1; then
+	BOOTDEV="$(findfs LABEL=ZURVAN-BOOT 2>/dev/null)" || BOOTDEV=""
+	if [ -n "$BOOTDEV" ]; then
+		mkdir -p /run/zboot
+		if mount -t ext4 "$BOOTDEV" /run/zboot 2>/dev/null; then
+			env=/run/zboot/boot/grub/grubenv
+			if [ -f "$env" ]; then
+				cur="$(zurvan-grubenv "$env" get active)"
+				try="$(zurvan-grubenv "$env" get ab_try)"
+				if [ "$cur" != "$SLOT" ] || [ "$try" != "0" ]; then
+					zurvan-grubenv "$env" set "active=$SLOT" "ab_try=0" \
+						&& echo "[rc.init] slot $SLOT committed as active"
+				fi
+			fi
+			umount /run/zboot
+		fi
+	fi
+fi
+
 echo "[rc.init] done."
