@@ -103,6 +103,14 @@ chmod +x "$ROOTFS_OUT/usr/bin/zurvan-provision"
 # be pointed at via zurvan.config=<path> on the kernel cmdline.
 cp "$HERE/packages/provisioner/example.yaml" "$ROOTFS_OUT/etc/zurvan.yaml"
 
+# --- zurvan-install: disk installer (v2 milestone 1) --------------------------
+cp "$HERE/packages/installer/zurvan-install" "$ROOTFS_OUT/sbin/zurvan-install"
+chmod +x "$ROOTFS_OUT/sbin/zurvan-install"
+
+# --- zurvan-pkg: package tool + boot-time set-dresser (v2 milestone 1) --------
+cp "$HERE/packages/pkgtool/zurvan-pkg" "$ROOTFS_OUT/sbin/zurvan-pkg"
+chmod +x "$ROOTFS_OUT/sbin/zurvan-pkg"
+
 # --- /init ------------------------------------------------------------------
 if [ "$USE_C_INIT" = "1" ]; then
 	if [ ! -x "$INIT_BIN" ]; then
@@ -124,9 +132,24 @@ mknod -m 600 "$ROOTFS_OUT/dev/console" c 5 1 2>/dev/null || true
 mknod -m 666 "$ROOTFS_OUT/dev/null"    c 1 3 2>/dev/null || true
 
 # --- pack -------------------------------------------------------------------
+# Pack from a native-filesystem staging copy: when build/ lives on a Windows
+# mount (WSL drvfs) every file is uid 1000 with mode 777, and that leaks into
+# the archive — dropbear then rejects authorized_keys under a home the user
+# doesn't own. Root-owned, go-w files are what an OS image should be anyway.
 mkdir -p "$BUILD"
 echo ">> packing $INITRD"
-( cd "$ROOTFS_OUT" && find . | cpio -o -H newc 2>/dev/null | gzip -9 ) > "$INITRD"
+PACK="$(mktemp -d)"
+cp -a "$ROOTFS_OUT/." "$PACK/"
+if [ "$(id -u)" = 0 ]; then
+	chown -R 0:0 "$PACK"
+else
+	echo "!! not root — archive keeps uid $(id -u); SSH into baked-in users may fail" >&2
+fi
+chmod -R go-w "$PACK"
+chmod 1777 "$PACK/tmp"
+chmod 700  "$PACK/root"
+( cd "$PACK" && find . | cpio -o -H newc 2>/dev/null | gzip -9 ) > "$INITRD"
+rm -rf "$PACK"
 
 echo ">> done: $INITRD"
 ls -lh "$INITRD"

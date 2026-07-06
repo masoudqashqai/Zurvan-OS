@@ -46,6 +46,14 @@ if [ -n "$DATA_DEV" ]; then
 	fi
 fi
 
+# --- set-dresser: recreate the standard-path symlinks for installed apps ------
+# The RAM root is reborn empty every boot; zurvan-pkg dress replants every
+# /usr/bin, /var/lib, ... symlink into /data from the package manifests.
+# Must run before services so anything the YAML starts finds its binaries.
+if [ -n "$DATA_DEV" ] && command -v zurvan-pkg >/dev/null 2>&1; then
+	zurvan-pkg dress
+fi
+
 # --- loopback ---------------------------------------------------------------
 ip link set lo up 2>/dev/null || ifconfig lo up 2>/dev/null
 
@@ -62,9 +70,10 @@ else
 	echo "[rc.init] no eth0 — is VIRTIO_NET in the kernel + -netdev user in QEMU?"
 fi
 
-# --- first-boot provisioner (milestone 6) -----------------------------------
-# Runs once, guarded by a marker file. On the RAM-backed initramfs every boot
-# is a first boot; the marker matters once a persistent root exists.
+# --- provisioner ---------------------------------------------------------
+# Runs once per boot, guarded by a marker file. The marker stays on the RAM
+# root by design: the root is reborn on every boot, so the YAML (from /data
+# when present) is reapplied fresh each time. Idempotency makes that safe.
 if [ -x /usr/bin/zurvan-provision ] && [ ! -e /var/lib/zurvan/provisioned ]; then
 	/usr/bin/zurvan-provision \
 		&& mkdir -p /var/lib/zurvan && : > /var/lib/zurvan/provisioned

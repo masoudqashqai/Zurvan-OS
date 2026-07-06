@@ -9,9 +9,12 @@
 # "- item" lists, and nested maps. No anchors, no multi-line strings, no
 # inline {}/[] collections, no tabs. Full YAML is a rabbit hole.
 #
-# Config source: zurvan.config=<path> on the kernel cmdline, falling back to
-# /etc/zurvan.yaml. Every action is idempotent — a re-run is safe. rc.init
-# additionally guards with /var/lib/zurvan/provisioned so it runs once.
+# Config source, in order: zurvan.config=<path> on the kernel cmdline, then
+# /data/zurvan.yaml (the persistent disk, when rc.init mounted one), then
+# /etc/zurvan.yaml baked into the image. Every action is idempotent — a re-run
+# is safe. rc.init additionally guards with /var/lib/zurvan/provisioned; that
+# marker lives on the RAM root on purpose, so the YAML is reapplied fresh on
+# every boot.
 #
 # Runs on busybox sh + awk only; no other dependencies.
 set -u
@@ -27,6 +30,9 @@ if [ -r /proc/cmdline ]; then
 			zurvan.config=*) CONFIG="${word#zurvan.config=}" ;;
 		esac
 	done
+fi
+if [ -z "$CONFIG" ] && [ -r /data/zurvan.yaml ]; then
+	CONFIG=/data/zurvan.yaml
 fi
 CONFIG="${CONFIG:-/etc/zurvan.yaml}"
 [ -r "$CONFIG" ] || { log "no config at $CONFIG — nothing to do."; exit 0; }
@@ -157,6 +163,11 @@ for i in $(indices users); do
 	home="$(awk -F: -v u="$name" '$1 == u { print $6 }' /etc/passwd)"
 	keys="$(indices "users.$i.authorized_keys")"
 	if [ -n "$keys" ] && [ -n "$home" ]; then
+		# dropbear silently refuses authorized_keys unless the home is
+		# owned by the user and not group/world-writable. Normalize here
+		# in case the image was packed with odd ownership.
+		chown "$name" "$home" 2>/dev/null
+		chmod go-w "$home" 2>/dev/null
 		mkdir -p "$home/.ssh"
 		: > "$home/.ssh/authorized_keys"
 		for k in $keys; do
@@ -182,6 +193,14 @@ for i in $(indices services); do
 			# dropbear: -R generates host keys in /etc/dropbear on first
 			# connection, so a fresh RAM boot needs no key ceremony.
 			if command -v dropbear >/dev/null 2>&1; then
+				# With a persistent /data, host keys live there (via an
+				# /etc symlink) so the box keeps one SSH identity across
+				# reboots instead of a new fingerprint every boot.
+				if mountpoint -q /data 2>/dev/null && [ ! -L /etc/dropbear ]; then
+					mkdir -p /data/etc/dropbear
+					rm -rf /etc/dropbear
+					ln -s /data/etc/dropbear /etc/dropbear
+				fi
 				mkdir -p /etc/dropbear
 				if pgrep dropbear >/dev/null 2>&1; then
 					log "service ssh: already running"
