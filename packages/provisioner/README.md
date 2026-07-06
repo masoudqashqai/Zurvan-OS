@@ -43,7 +43,7 @@ the OS stays disposable.
 | `hostname` | write `/etc/hostname` + `sethostname()` |
 | `network`  | static IP or `dhcp` per interface (otherwise udhcpc already ran) |
 | `users`    | create users, set shells, install `authorized_keys` / passwords |
-| `services` | start a defined set of services — v1 knows `networking` and `ssh` (dropbear) |
+| `services` | `networking` is applied directly; every other name is **enabled** for [`zurvan-svc`](../../svc/README.md) (v2 M2), which starts and babysits it — built-ins define themselves in `/etc/svc/`, packages via their manifest `service:` block |
 
 ## Implementation notes
 

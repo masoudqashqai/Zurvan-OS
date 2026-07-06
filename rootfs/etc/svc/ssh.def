@@ -1,0 +1,7 @@
+# ssh — dropbear under zurvan-svc supervision.
+# -F: foreground (supervised services must not daemonize themselves).
+# -R: generate host keys on first demand; with a /data disk the provisioner
+#     has already pointed /etc/dropbear at persistent storage.
+exec=/bin/dropbear -F -R
+after=networking
+restart=yes

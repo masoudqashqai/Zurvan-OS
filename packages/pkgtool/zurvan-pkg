@@ -28,6 +28,11 @@
 #     - /usr/bin/hello -> bin/hello
 #   state_links:                       # -> path inside /data/srv/<name>/
 #     - /var/lib/hello -> .
+#   service:                           # exported to /run/svc/<name>.def for
+#     exec: /usr/bin/hellod            # zurvan-svc (v2 M2); enable it by adding
+#     after:                           # the package name to services: in the
+#       - networking                   # YAML
+#     restart: yes
 set -eu
 
 APPS=/data/apps
@@ -52,6 +57,44 @@ yaml_list() {
 		/^[^ \t]/ { ink = ($0 ~ "^" k ":") ; next }
 		ink && /^[ \t]+- / { sub(/^[ \t]+- [ \t]*/, ""); print }
 	' "$2"
+}
+
+# --- service export -----------------------------------------------------------
+# svc_scalar KEY FILE / svc_after FILE read inside the top-level service: block.
+# The digested flat .def is all zurvan-svc ever sees — the C supervisor parses
+# no YAML (one YAML parser per operating system is plenty).
+svc_scalar() {
+	awk -v k="$1:" '
+		/^service:/  { s = 1; next }
+		/^[^ \t]/    { s = 0 }
+		s && $1 == k { sub(/^[ \t]*[^:]*:[ \t]*/, ""); gsub(/^"|"$/, ""); print; exit }
+	' "$2"
+}
+svc_after() {
+	awk '
+		/^service:/           { s = 1; next }
+		/^[^ \t]/             { s = 0; a = 0 }
+		s && $1 == "after:"   { a = 1; next }
+		s && a && /^[ \t]+- / { sub(/^[ \t]+- [ \t]*/, ""); out = out $0 " "; next }
+		s && /^[ \t]+[^- \t]/ { a = 0 }
+		END                   { sub(/ $/, "", out); print out }
+	' "$1"
+}
+
+export_service() {
+	name="$1"
+	man="$APPS/$name/manifest.yaml"
+	[ -f "$man" ] || return 0
+	ex="$(svc_scalar exec "$man")"
+	[ -n "$ex" ] || return 0
+	mkdir -p /run/svc
+	{
+		echo "exec=$ex"
+		aft="$(svc_after "$man")"
+		[ -n "$aft" ] && echo "after=$aft"
+		r="$(svc_scalar restart "$man")"
+		echo "restart=${r:-yes}"
+	} > "/run/svc/$name.def"
 }
 
 # --- linking ---------------------------------------------------------------------
@@ -133,7 +176,10 @@ cmd_install() {
 
 	# Dress immediately so a fresh install works without a reboot.
 	plant_links "$name"
+	export_service "$name"
 	log "installed $name${version:+ $version} -> $APPS/$name (state: $SRV/$name)"
+	[ -f "/run/svc/$name.def" ] \
+		&& log "service definition exported — add '$name' to services: in the YAML to enable it"
 }
 
 cmd_remove() {
@@ -141,6 +187,7 @@ cmd_remove() {
 	name="$1"
 	[ -d "$APPS/$name" ] || fail "$name is not installed"
 	remove_links "$name"
+	rm -f "/run/svc/$name.def"
 	rm -rf "$APPS/$name"
 	log "removed $name (state kept in $SRV/$name — delete that yourself if you mean it)"
 }
@@ -165,6 +212,7 @@ cmd_dress() {
 		[ -f "$man" ] || continue
 		name="$(yaml_scalar name "$man")"
 		plant_links "$name"
+		export_service "$name"
 		log "dressed $name"
 	done
 }

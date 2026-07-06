@@ -111,6 +111,14 @@ chmod +x "$ROOTFS_OUT/sbin/zurvan-install"
 cp "$HERE/packages/pkgtool/zurvan-pkg" "$ROOTFS_OUT/sbin/zurvan-pkg"
 chmod +x "$ROOTFS_OUT/sbin/zurvan-pkg"
 
+# --- zurvan-svc: the service supervisor (v2 milestone 2) -----------------------
+SVC_BIN="$HERE/svc/zurvan-svc"
+if [ ! -x "$SVC_BIN" ]; then
+	echo "!! missing $SVC_BIN — run 'make init' first" >&2
+	exit 1
+fi
+cp "$SVC_BIN" "$ROOTFS_OUT/sbin/zurvan-svc"
+
 # --- /init ------------------------------------------------------------------
 if [ "$USE_C_INIT" = "1" ]; then
 	if [ ! -x "$INIT_BIN" ]; then

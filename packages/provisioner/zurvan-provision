@@ -181,7 +181,18 @@ for i in $(indices users); do
 done
 
 # --- services -----------------------------------------------------------------
-# A bounded set of names the provisioner knows, not arbitrary units.
+# The provisioner no longer starts daemons (that's zurvan-svc's job, v2 M2);
+# it ENABLES them by name in /run/svc/enabled, which the supervisor — spawned
+# by PID 1 right after rc.init finishes — reads once at startup. `networking`
+# stays a provisioner action, not a daemon. Anything else is enabled verbatim:
+# built-ins define themselves in /etc/svc, packages via their manifest, and
+# zurvan-svc warns about names nothing defines.
+enable_svc() {
+	mkdir -p /run/svc
+	grep -qx "$1" /run/svc/enabled 2>/dev/null || echo "$1" >> /run/svc/enabled
+	log "service $1: enabled"
+}
+
 for i in $(indices services); do
 	svc="$(get "services.$i")"
 	case "$svc" in
@@ -190,29 +201,24 @@ for i in $(indices services); do
 			log "service networking: up"
 			;;
 		ssh)
-			# dropbear: -R generates host keys in /etc/dropbear on first
-			# connection, so a fresh RAM boot needs no key ceremony.
+			# Pre-start setup stays here: with a persistent /data, host
+			# keys live there (via an /etc symlink) so the box keeps one
+			# SSH identity across reboots. dropbear itself runs under
+			# supervision (see /etc/svc/ssh.def).
 			if command -v dropbear >/dev/null 2>&1; then
-				# With a persistent /data, host keys live there (via an
-				# /etc symlink) so the box keeps one SSH identity across
-				# reboots instead of a new fingerprint every boot.
 				if mountpoint -q /data 2>/dev/null && [ ! -L /etc/dropbear ]; then
 					mkdir -p /data/etc/dropbear
 					rm -rf /etc/dropbear
 					ln -s /data/etc/dropbear /etc/dropbear
 				fi
 				mkdir -p /etc/dropbear
-				if pgrep dropbear >/dev/null 2>&1; then
-					log "service ssh: already running"
-				else
-					dropbear -R && log "service ssh: dropbear up (port 22)"
-				fi
+				enable_svc ssh
 			else
 				log "service ssh: dropbear not in this image"
 			fi
 			;;
 		*)
-			log "unknown service '$svc' (v1 knows: networking, ssh)"
+			enable_svc "$svc"
 			;;
 	esac
 done

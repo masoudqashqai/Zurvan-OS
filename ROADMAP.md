@@ -77,7 +77,11 @@ the YAML, and `/data`.
 
 ---
 
-## Milestone 2 — the babysitter: a declarative service supervisor
+## Milestone 2 — the babysitter: a declarative service supervisor ✅
+
+**Done (2026-07-06).** Verified in QEMU: dropbear and an installed package (`tick`)
+run under `zurvan-svc`; killing either gets it restarted within seconds, with the
+restart visible in tick's persistent log.
 
 The C PID 1 supervises exactly one shell — that was the v1 boundary, and it holds.
 A server needs several programs running and restarted when they die.

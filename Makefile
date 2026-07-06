@@ -43,8 +43,9 @@ userland: ## Build static busybox, bash, dropbear, and e2fsprogs
 	@userland/build-dropbear.sh
 	@userland/build-e2fsprogs.sh
 
-init: ## Compile the C PID 1
+init: ## Compile the C PID 1 and the zurvan-svc supervisor
 	@$(MAKE) -C init
+	@$(MAKE) -C svc
 
 rootfs: ## Assemble rootfs/ and pack rootfs.cpio.gz
 	@scripts/build.sh
@@ -63,6 +64,7 @@ iso: ## (ROADMAP) Build a bootable ISO with GRUB — not part of v1
 clean: ## Remove the assembled rootfs and initramfs
 	@rm -rf "$(BUILD)"
 	@$(MAKE) -C init clean
+	@$(MAKE) -C svc clean
 
 distclean: clean ## Also remove kernel/userland build trees
 	@rm -rf kernel/build kernel/src userland/build userland/src
