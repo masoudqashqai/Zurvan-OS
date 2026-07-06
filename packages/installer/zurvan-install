@@ -1,0 +1,149 @@
+#!/bin/sh
+# zurvan-install — put Zurvan on a disk. The ONLY program allowed to touch a
+# raw block device (v2 milestone 1); everything else in the system treats disks
+# as read-only facts.
+#
+# What "installed" means here is deliberately small. The OS itself is never
+# unpacked onto the disk — the disk carries exactly three things:
+#
+#   MBR + sector 1..: GRUB's boot.img + core.img (prebuilt on the install CD)
+#   p1  ZURVAN-BOOT: /boot/bzImage + /boot/initrd.img + GRUB modules + grub.cfg
+#   p2  ZURVAN-DATA: the persistent /data partition (apps, YAML, host keys)
+#
+# Every boot still unpacks the initramfs into RAM and runs from there; p2 is
+# the only thing that ever changes. Upgrading = replacing two files on p1.
+#
+# Usage:  zurvan-install [--yes] /dev/sda
+# Run it from a Zurvan booted off the install CD, with the target disk attached.
+set -eu
+
+log()  { echo "[install] $*"; }
+fail() { echo "[install] ERROR: $*" >&2; exit 1; }
+
+BOOT_MB=256           # p1 size; kernel+initrd+grub is ~25 MB, leave headroom
+CDDEV=""              # set by find_cd
+CDMNT=/mnt/zurvan-cd
+TGT=/mnt/zurvan-boot
+DATA=/mnt/zurvan-data
+
+# --- arguments ----------------------------------------------------------------
+YES=0
+DISK=""
+for a in "$@"; do
+	case "$a" in
+		--yes) YES=1 ;;
+		-*) fail "unknown option $a (usage: zurvan-install [--yes] /dev/DISK)" ;;
+		*) DISK="$a" ;;
+	esac
+done
+[ -n "$DISK" ] || fail "no target disk given (usage: zurvan-install [--yes] /dev/DISK)"
+[ -b "$DISK" ] || fail "$DISK is not a block device"
+
+# partition naming: /dev/sda -> sda1, but /dev/nvme0n1 -> nvme0n1p1
+case "$DISK" in *[0-9]) PART="${DISK}p" ;; *) PART="$DISK" ;; esac
+
+# --- safety -------------------------------------------------------------------
+grep -q "^$DISK" /proc/mounts && fail "$DISK has mounted partitions — refusing"
+if blkid "$DISK" 2>/dev/null | grep -q ZURVAN; then
+	[ "$YES" = 1 ] || fail "$DISK already carries a Zurvan install (re-run with --yes to overwrite)"
+fi
+
+if [ "$YES" != 1 ]; then
+	echo "This will DESTROY EVERYTHING on $DISK and install Zurvan."
+	printf "Type yes to continue: "
+	read -r answer
+	[ "$answer" = "yes" ] || fail "aborted"
+fi
+
+# --- find the install CD -------------------------------------------------------
+# The CD we booted from carries the kernel, initrd, GRUB modules, and the
+# prebuilt boot.img/core.img under /install (see scripts/make-iso.sh).
+find_cd() {
+	mkdir -p "$CDMNT"
+	for c in /dev/sr0 /dev/sr1; do
+		[ -b "$c" ] || continue
+		if mount -t iso9660 -o ro "$c" "$CDMNT" 2>/dev/null; then
+			if [ -f "$CDMNT/install/core.img" ]; then
+				CDDEV="$c"
+				return 0
+			fi
+			umount "$CDMNT"
+		fi
+	done
+	return 1
+}
+find_cd || fail "no install CD found (need /install/core.img on the ISO — rebuild with make iso)"
+log "install media: $CDDEV"
+[ "$CDDEV" = "$DISK" ] && fail "target disk is the install CD"
+
+# --- partition -----------------------------------------------------------------
+# busybox fdisk, script-driven: new DOS table, p1 = ${BOOT_MB}M (bootable),
+# p2 = rest of the disk.
+log "partitioning $DISK (p1 boot ${BOOT_MB}M, p2 data = rest)"
+printf 'o\nn\np\n1\n\n+%sM\nn\np\n2\n\n\na\n1\nw\n' "$BOOT_MB" \
+	| fdisk "$DISK" >/dev/null 2>&1 || true   # fdisk exits 1 on the re-read ioctl even on success
+sleep 1
+[ -b "${PART}1" ] && [ -b "${PART}2" ] || fail "partitions did not appear (${PART}1/${PART}2)"
+
+# --- filesystems ----------------------------------------------------------------
+log "mkfs.ext4 ${PART}1 (ZURVAN-BOOT) + ${PART}2 (ZURVAN-DATA)"
+mkfs.ext4 -q -F -L ZURVAN-BOOT "${PART}1"
+mkfs.ext4 -q -F -L ZURVAN-DATA "${PART}2"
+
+# --- boot partition: kernel + initrd + GRUB ------------------------------------
+log "copying kernel, initrd, and GRUB modules to ${PART}1"
+mkdir -p "$TGT"
+mount -t ext4 "${PART}1" "$TGT"
+mkdir -p "$TGT/boot/grub/i386-pc"
+cp "$CDMNT/boot/bzImage"    "$TGT/boot/bzImage"
+cp "$CDMNT/boot/initrd.img" "$TGT/boot/initrd.img"
+# normal.mod & friends — core.img loads these from (hd0,msdos1)/boot/grub
+cp "$CDMNT"/boot/grub/i386-pc/*.mod "$TGT/boot/grub/i386-pc/" 2>/dev/null || true
+cp "$CDMNT"/boot/grub/i386-pc/*.lst "$TGT/boot/grub/i386-pc/" 2>/dev/null || true
+
+# Same two entries as the ISO: VGA first (VMware / real hardware), serial for
+# headless QEMU.
+cat > "$TGT/boot/grub/grub.cfg" <<'CFG'
+serial --unit=0 --speed=115200
+terminal_input console serial
+terminal_output console serial
+
+set default=0
+set timeout=3
+
+menuentry "Zurvan" {
+	linux  /boot/bzImage console=tty0
+	initrd /boot/initrd.img
+}
+
+menuentry "Zurvan (serial console)" {
+	linux  /boot/bzImage console=ttyS0
+	initrd /boot/initrd.img
+}
+CFG
+
+# --- data partition: the memory box ---------------------------------------------
+# Seed /data with the skeleton and the YAML the image would otherwise bake in;
+# from now on THIS copy is the box's config (the provisioner prefers it).
+log "seeding /data on ${PART}2"
+mkdir -p "$DATA"
+mount -t ext4 "${PART}2" "$DATA"
+mkdir -p "$DATA/apps" "$DATA/srv" "$DATA/etc"
+[ -f "$DATA/zurvan.yaml" ] || cp /etc/zurvan.yaml "$DATA/zurvan.yaml" 2>/dev/null || true
+
+# --- GRUB boot code ---------------------------------------------------------------
+# The manual BIOS install grub-install would do for this exact layout:
+#   boot.img -> first 440 bytes of the MBR (leaves the partition table alone);
+#     its default "load sector 1" is exactly where we put core.img.
+#   core.img -> sectors 1..2047 (p1 starts at 2048, so the gap is ours).
+log "writing GRUB boot code to $DISK"
+CORE_SIZE=$(wc -c < "$CDMNT/install/core.img")
+[ "$CORE_SIZE" -lt $((2047 * 512)) ] || fail "core.img too large for the MBR gap"
+dd if="$CDMNT/install/boot.img" of="$DISK" bs=440 count=1 conv=notrunc 2>/dev/null
+dd if="$CDMNT/install/core.img" of="$DISK" bs=512 seek=1 conv=notrunc 2>/dev/null
+
+# --- finish -----------------------------------------------------------------------
+sync
+umount "$TGT" "$DATA" "$CDMNT"
+log "done. Remove the CD and reboot — the box now boots from $DISK."
+log "Persistent state lives on ${PART}2 (/data); edit /data/zurvan.yaml to reconfigure."

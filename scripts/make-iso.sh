@@ -56,6 +56,23 @@ menuentry "Zurvan (serial console)" {
 }
 CFG
 
+# --- installer payload (v2 milestone 1) ----------------------------------------
+# zurvan-install writes these to a target disk: boot.img goes in the MBR,
+# core.img at sector 1 with its prefix pointing at the disk's boot partition.
+# Prebuilt here because the guest has no grub tooling — the CD carries the
+# boot code ready-made, and the module dir grub-mkrescue puts on the ISO
+# (/boot/grub/i386-pc) doubles as the module source for the disk install.
+GRUB_LIB="${GRUB_LIB:-/usr/lib/grub/i386-pc}"
+command -v grub-mkimage >/dev/null 2>&1 \
+	|| { echo "!! grub-mkimage not found (install grub-pc-bin)" >&2; exit 1; }
+[ -f "$GRUB_LIB/boot.img" ] \
+	|| { echo "!! $GRUB_LIB/boot.img not found (install grub-pc-bin)" >&2; exit 1; }
+mkdir -p "$STAGE/install"
+grub-mkimage -O i386-pc -o "$STAGE/install/core.img" \
+	--prefix='(hd0,msdos1)/boot/grub' \
+	biosdisk part_msdos ext2
+cp "$GRUB_LIB/boot.img" "$STAGE/install/boot.img"
+
 # --- build --------------------------------------------------------------------
 echo ">> grub-mkrescue -> $ISO"
 grub-mkrescue -o "$ISO" "$STAGE"
