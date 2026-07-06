@@ -19,6 +19,18 @@ INITRD="${INITRD:-$HERE/build/rootfs.cpio.gz}"
 #   APPEND_EXTRA="zurvan.config=/etc/zurvan.yaml" scripts/run-qemu.sh
 APPEND_EXTRA="${APPEND_EXTRA:-}"
 
+# Persistent /data disk (v2): attach a raw image, e.g.
+#   DATA_DISK=build/data.img scripts/run-qemu.sh
+# DATA_IF picks the bus: virtio (default, /dev/vda) or ide (/dev/sda, the
+# closest -kernel-boot stand-in for the VMware SATA path).
+DATA_DISK="${DATA_DISK:-}"
+DATA_IF="${DATA_IF:-virtio}"
+DISK_ARGS=""
+if [ -n "$DATA_DISK" ]; then
+	[ -f "$DATA_DISK" ] || { echo "!! missing disk image: $DATA_DISK" >&2; exit 1; }
+	DISK_ARGS="-drive file=$DATA_DISK,format=raw,if=$DATA_IF"
+fi
+
 [ -f "$KERNEL_IMG" ] || { echo "!! missing kernel: $KERNEL_IMG (run: make kernel)" >&2; exit 1; }
 [ -f "$INITRD" ]     || { echo "!! missing initrd: $INITRD (run: make rootfs)" >&2; exit 1; }
 
@@ -37,4 +49,5 @@ exec "$QEMU" \
 	-append "console=ttyS0 $APPEND_EXTRA" \
 	-netdev user,id=net0 \
 	-device virtio-net-pci,netdev=net0 \
+	$DISK_ARGS \
 	-nographic

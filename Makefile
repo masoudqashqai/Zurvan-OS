@@ -37,10 +37,11 @@ all: kernel userland init rootfs ## Build every layer (does not run)
 kernel: ## Fetch, configure and build the Linux kernel
 	@kernel/build.sh
 
-userland: ## Build static busybox, bash, and dropbear
+userland: ## Build static busybox, bash, dropbear, and e2fsprogs
 	@userland/build-busybox.sh
 	@userland/build-bash.sh
 	@userland/build-dropbear.sh
+	@userland/build-e2fsprogs.sh
 
 init: ## Compile the C PID 1
 	@$(MAKE) -C init

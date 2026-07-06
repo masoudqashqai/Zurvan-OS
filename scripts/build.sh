@@ -81,6 +81,21 @@ else
 	echo "!! no dropbearmulti at $DROPBEAR — image ships without SSH" >&2
 fi
 
+# --- e2fsprogs: real ext4 mkfs/fsck for the persistent /data disk ------------
+# Overwrites the busybox applet links at the same paths (busybox mke2fs is
+# ext2-only). Best-effort: a RAM-only image still boots without them.
+for tool in mke2fs e2fsck; do
+	if [ -x "$HERE/userland/build/$tool" ]; then
+		rm -f "$ROOTFS_OUT/sbin/$tool"
+		cp "$HERE/userland/build/$tool" "$ROOTFS_OUT/sbin/$tool"
+	else
+		echo "!! no $tool at userland/build/$tool — image ships busybox's ext2-only one" >&2
+	fi
+done
+ln -sf mke2fs "$ROOTFS_OUT/sbin/mkfs.ext4"
+ln -sf e2fsck "$ROOTFS_OUT/sbin/fsck.ext4"
+[ -f "$HERE/userland/build/mke2fs.conf" ] && cp "$HERE/userland/build/mke2fs.conf" "$ROOTFS_OUT/etc/mke2fs.conf"
+
 # --- first-boot provisioner (the signature feature) --------------------------
 cp "$HERE/packages/provisioner/zurvan-provision" "$ROOTFS_OUT/usr/bin/zurvan-provision"
 chmod +x "$ROOTFS_OUT/usr/bin/zurvan-provision"

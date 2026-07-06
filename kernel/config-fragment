@@ -28,6 +28,30 @@ CONFIG_VIRTIO=y
 CONFIG_VIRTIO_PCI=y
 CONFIG_VIRTIO_NET=y
 
+# --- block devices: the persistent /data disk (v2 milestone 1) ---------------
+# libata exposes SATA/IDE disks as SCSI disks (/dev/sdX), so SCSI + SD come too.
+CONFIG_BLOCK=y
+CONFIG_SCSI=y
+CONFIG_BLK_DEV_SD=y
+CONFIG_ATA=y
+CONFIG_SATA_AHCI=y
+# legacy IDE controller: plain `qemu -hda` and VMware IDE
+CONFIG_ATA_PIIX=y
+# virtio-blk: QEMU/KVM disks attached with -drive if=virtio (/dev/vdX)
+CONFIG_VIRTIO_BLK=y
+# VMware's default SCSI controllers for Linux guests: LSI Logic (mptspi) and
+# PVSCSI — without these a VMware disk on the default controller is invisible.
+CONFIG_FUSION=y
+CONFIG_FUSION_SPI=y
+CONFIG_VMWARE_PVSCSI=y
+
+# --- partition tables: zurvan-install writes MBR; GPT costs nothing ----------
+CONFIG_MSDOS_PARTITION=y
+CONFIG_EFI_PARTITION=y
+
+# --- ext4: the /data filesystem ----------------------------------------------
+CONFIG_EXT4_FS=y
+
 # --- filesystems used by the rootfs / overlay stretch goal ------------------
 CONFIG_TMPFS=y
 CONFIG_PROC_FS=y

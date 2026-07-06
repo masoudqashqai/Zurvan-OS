@@ -7,6 +7,45 @@
 #
 # Keep it idempotent and don't let it hang forever — PID 1 waits for it.
 
+# --- persistent /data (v2 milestone 1) ---------------------------------------
+# One ext4 partition labeled ZURVAN-DATA holds everything that survives reboot:
+# the YAML, installed apps, service state, SSH host keys. Persistence is opt-in:
+# no labeled disk means a pure v1 RAM boot, and nothing below may assume /data.
+data_disk_present() {
+	for b in /sys/block/*; do
+		[ -e "$b" ] || return 1
+		case "${b##*/}" in ram*|loop*|sr*|fd*) ;; *) return 0 ;; esac
+	done
+	return 1
+}
+
+DATA_DEV=""
+if data_disk_present; then
+	# Disk probing can still be settling when rc.init runs; retry briefly.
+	# A disk without our label (e.g. a blank disk on the install boot) pays
+	# these few seconds once; labeled disks match on the first try.
+	tries=5
+	while [ "$tries" -gt 0 ]; do
+		DATA_DEV="$(findfs LABEL=ZURVAN-DATA 2>/dev/null)" || DATA_DEV=""
+		[ -n "$DATA_DEV" ] && break
+		tries=$((tries - 1))
+		[ "$tries" -gt 0 ] && sleep 1
+	done
+fi
+
+if [ -n "$DATA_DEV" ]; then
+	mkdir -p /data
+	# e2fsck -p: fix what is safe to fix, ask nothing. Best-effort — the
+	# binary ships with the image, but /data must also mount without it.
+	command -v e2fsck >/dev/null 2>&1 && e2fsck -p "$DATA_DEV" >/dev/null 2>&1
+	if mount -t ext4 "$DATA_DEV" /data; then
+		echo "[rc.init] /data on $DATA_DEV"
+	else
+		echo "[rc.init] WARNING: $DATA_DEV found but mount failed — booting without /data"
+		DATA_DEV=""
+	fi
+fi
+
 # --- loopback ---------------------------------------------------------------
 ip link set lo up 2>/dev/null || ifconfig lo up 2>/dev/null
 
