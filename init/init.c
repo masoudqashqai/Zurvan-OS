@@ -116,6 +116,24 @@ static void run_rc(void)
 	}
 }
 
+/* Spawn the service supervisor (v2 milestone 2), if the image ships one.
+ * It is supervised exactly like the shell: just another child to respawn.
+ * PID 1 stays a babysitter of two; zurvan-svc babysits everything else. */
+static pid_t spawn_svc(void)
+{
+	const char *svc = "/sbin/zurvan-svc";
+	if (access(svc, X_OK) != 0)
+		return -1;
+
+	pid_t pid = fork();
+	if (pid == 0) {
+		setsid();
+		execl(svc, svc, (char *)NULL);
+		_exit(127);
+	}
+	return pid;
+}
+
 /* Spawn the best available shell as a session leader. Returns its pid, or -1. */
 static pid_t spawn_shell(void)
 {
@@ -163,6 +181,7 @@ int main(void)
 
 	run_rc();
 
+	pid_t svc   = spawn_svc();
 	pid_t shell = spawn_shell();
 
 	/*
@@ -190,6 +209,12 @@ int main(void)
 		if (dead == shell) {
 			msg("shell exited; respawning.");
 			shell = spawn_shell();
+		} else if (svc > 0 && dead == svc) {
+			/* zurvan-svc never exits by design, so this is a crash.
+			 * Breathe for a second so a broken binary can't spin us. */
+			msg("service supervisor exited; respawning.");
+			sleep(1);
+			svc = spawn_svc();
 		}
 		/* Any other reaped pid was an orphan we adopted — nothing else to do. */
 	}
