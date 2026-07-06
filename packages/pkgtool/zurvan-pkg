@@ -1,0 +1,185 @@
+#!/bin/sh
+# zurvan-pkg — install, remove, list, and "dress" Zurvan packages.
+#
+# A package is a gzipped tarball of STATIC binaries plus one manifest.yaml,
+# built by catalog/build-<name>.sh. Because nothing is dynamically linked,
+# install is just: unpack into /data/apps/<name>/ and plant symlinks.
+#
+# The set-dresser trick: programs expect /usr/bin, /var/lib, /etc — and the
+# RAM root is freely writable — so the standard paths are symlinks into /data,
+# rebuilt from the manifests on every boot (`zurvan-pkg dress`, called by
+# rc.init) and immediately on install. They can never rot: the RAM root is
+# reborn each boot and re-dressed from scratch.
+#
+#   /data/apps/<name>/   the unpacked package (owned by zurvan-pkg, replaced
+#                        wholesale on upgrade)
+#   /data/srv/<name>/    the app's persistent state (never touched by remove)
+#
+# Dependencies are deliberately shallow: `needs:` names other packages that
+# must already be installed. One loop, no versions, no graphs — if this ever
+# wants to be cleverer, stop (see ROADMAP.md).
+#
+# Manifest (same tiny YAML dialect as the provisioner):
+#   name: hello
+#   version: "1.0"
+#   needs:
+#     - openssl
+#   links:                             # -> path inside /data/apps/<name>/
+#     - /usr/bin/hello -> bin/hello
+#   state_links:                       # -> path inside /data/srv/<name>/
+#     - /var/lib/hello -> .
+set -eu
+
+APPS=/data/apps
+SRV=/data/srv
+
+log()  { echo "[pkg] $*"; }
+fail() { echo "[pkg] ERROR: $*" >&2; exit 1; }
+
+need_data() {
+	mountpoint -q /data 2>/dev/null \
+		|| fail "/data is not mounted — packages need the persistent disk (see zurvan-install)"
+}
+
+# --- manifest access -----------------------------------------------------------
+# yaml_scalar KEY FILE  -> value of a top-level "key: value"
+# yaml_list   KEY FILE  -> the "  - item" entries under a top-level "key:"
+yaml_scalar() {
+	awk -v k="$1:" '$1 == k { sub(/^[^:]*:[ \t]*/, ""); gsub(/^"|"$/, ""); print; exit }' "$2"
+}
+yaml_list() {
+	awk -v k="$1" '
+		/^[^ \t]/ { ink = ($0 ~ "^" k ":") ; next }
+		ink && /^[ \t]+- / { sub(/^[ \t]+- [ \t]*/, ""); print }
+	' "$2"
+}
+
+# --- linking ---------------------------------------------------------------------
+# Each entry is "<absolute path> -> <relative target>". links: resolve inside
+# /data/apps/<name>/, state_links: inside /data/srv/<name>/. The link lives on
+# the RAM root, so replacing whatever the image put there is fair game; the
+# /data side is only ever pointed AT, never deleted here.
+plant_list() {
+	name="$1"; key="$2"; base="$3"
+	man="$APPS/$name/manifest.yaml"
+	[ -f "$man" ] || return 0
+	yaml_list "$key" "$man" | while IFS= read -r entry; do
+		linkpath="${entry%% -> *}"
+		target="${entry##* -> }"
+		case "$linkpath" in /?*) ;; *) linkpath="" ;; esac
+		[ -n "$linkpath" ] && [ -n "$target" ] && [ "$linkpath" != "$entry" ] \
+			|| { log "WARNING: $name: bad $key entry '$entry' (want '/abs/path -> rel/path')"; continue; }
+		[ -e "$base/$target" ] \
+			|| log "WARNING: $name: $key target $target missing under $base"
+		mkdir -p "$(dirname "$linkpath")"
+		# an image-provided dir (e.g. an empty /var/lib/hello) yields to the link
+		[ ! -e "$linkpath" ] || [ -L "$linkpath" ] || rm -rf "$linkpath"
+		rm -f "$linkpath"
+		ln -s "$base/$target" "$linkpath"
+	done
+}
+
+plant_links() {
+	plant_list "$1" links "$APPS/$1"
+	plant_list "$1" state_links "$SRV/$1"
+}
+
+remove_list() {
+	name="$1"; key="$2"
+	man="$APPS/$name/manifest.yaml"
+	[ -f "$man" ] || return 0
+	yaml_list "$key" "$man" | while IFS= read -r entry; do
+		linkpath="${entry%% -> *}"
+		[ -n "$linkpath" ] && [ "$linkpath" != "$entry" ] && rm -f "$linkpath"
+	done
+}
+
+remove_links() {
+	remove_list "$1" links
+	remove_list "$1" state_links
+}
+
+# --- commands ---------------------------------------------------------------------
+cmd_install() {
+	need_data
+	tarball="$1"
+	[ -f "$tarball" ] || fail "no such file: $tarball"
+
+	# Unpack somewhere disposable first; trust the manifest, not the filename.
+	tmp="$APPS/.install.$$"
+	rm -rf "$tmp"; mkdir -p "$tmp"
+	tar -xzf "$tarball" -C "$tmp" || { rm -rf "$tmp"; fail "cannot unpack $tarball"; }
+	[ -f "$tmp/manifest.yaml" ] || { rm -rf "$tmp"; fail "$tarball has no manifest.yaml"; }
+
+	name="$(yaml_scalar name "$tmp/manifest.yaml")"
+	version="$(yaml_scalar version "$tmp/manifest.yaml")"
+	[ -n "$name" ] || { rm -rf "$tmp"; fail "manifest has no name:"; }
+
+	# Shallow dependency check — the whole resolver, on purpose.
+	missing=""
+	for dep in $(yaml_list needs "$tmp/manifest.yaml"); do
+		[ -d "$APPS/$dep" ] || missing="$missing $dep"
+	done
+	[ -z "$missing" ] || { rm -rf "$tmp"; fail "$name needs:$missing — install those first"; }
+
+	# Upgrade = replace the app dir wholesale. State in /data/srv survives.
+	if [ -d "$APPS/$name" ]; then
+		log "replacing installed $name"
+		remove_links "$name"
+		rm -rf "$APPS/$name"
+	fi
+	mv "$tmp" "$APPS/$name"
+	mkdir -p "$SRV/$name"
+
+	# Dress immediately so a fresh install works without a reboot.
+	plant_links "$name"
+	log "installed $name${version:+ $version} -> $APPS/$name (state: $SRV/$name)"
+}
+
+cmd_remove() {
+	need_data
+	name="$1"
+	[ -d "$APPS/$name" ] || fail "$name is not installed"
+	remove_links "$name"
+	rm -rf "$APPS/$name"
+	log "removed $name (state kept in $SRV/$name — delete that yourself if you mean it)"
+}
+
+cmd_list() {
+	need_data
+	found=0
+	for man in "$APPS"/*/manifest.yaml; do
+		[ -f "$man" ] || continue
+		found=1
+		printf '%s %s\n' \
+			"$(yaml_scalar name "$man")" "$(yaml_scalar version "$man")"
+	done
+	[ "$found" = 1 ] || log "no packages installed"
+}
+
+cmd_dress() {
+	# Rebuild every link from every manifest — called by rc.init each boot,
+	# after /data mounts and before services start. Idempotent by nature.
+	mountpoint -q /data 2>/dev/null || return 0
+	for man in "$APPS"/*/manifest.yaml; do
+		[ -f "$man" ] || continue
+		name="$(yaml_scalar name "$man")"
+		plant_links "$name"
+		log "dressed $name"
+	done
+}
+
+# --- dispatch -----------------------------------------------------------------------
+usage() {
+	echo "usage: zurvan-pkg install <pkg.tar.gz> | remove <name> | list | dress" >&2
+	exit 1
+}
+[ $# -ge 1 ] || usage
+cmd="$1"; shift
+case "$cmd" in
+	install) [ $# -eq 1 ] || usage; cmd_install "$1" ;;
+	remove)  [ $# -eq 1 ] || usage; cmd_remove "$1" ;;
+	list)    cmd_list ;;
+	dress)   cmd_dress ;;
+	*) usage ;;
+esac

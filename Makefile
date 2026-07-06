@@ -22,7 +22,7 @@ export TOP BUILD ROOTFS_OUT INITRD KERNEL_IMG
 
 # --- Meta -------------------------------------------------------------------
 .DEFAULT_GOAL := help
-.PHONY: help all kernel userland init rootfs run iso clean distclean
+.PHONY: help all kernel userland init rootfs catalog run iso clean distclean
 
 help: ## Show this help
 	@echo "Zurvan build targets:"
@@ -48,6 +48,9 @@ init: ## Compile the C PID 1
 
 rootfs: ## Assemble rootfs/ and pack rootfs.cpio.gz
 	@scripts/build.sh
+
+catalog: ## Build every package in catalog/ (static binaries + manifest)
+	@for b in catalog/build-*.sh; do "$$b"; done
 
 # --- Run --------------------------------------------------------------------
 run: ## Boot the built image in QEMU (-nographic; Ctrl-A X to exit)
