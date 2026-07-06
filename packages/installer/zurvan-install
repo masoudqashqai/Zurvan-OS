@@ -43,6 +43,13 @@ done
 case "$DISK" in *[0-9]) PART="${DISK}p" ;; *) PART="$DISK" ;; esac
 
 # --- safety -------------------------------------------------------------------
+# Reinstalling over an old Zurvan disk is a normal flow, but rc.init will have
+# auto-mounted its ZURVAN-DATA partition at /data. Release that one ourselves;
+# refuse anything mounted anywhere else (that's a disk in actual use).
+if grep -q "^$DISK[0-9p]* /data " /proc/mounts; then
+	log "unmounting the previous install's /data"
+	umount /data || fail "cannot unmount /data — is something using it?"
+fi
 grep -q "^$DISK" /proc/mounts && fail "$DISK has mounted partitions — refusing"
 if blkid "$DISK" 2>/dev/null | grep -q ZURVAN; then
 	[ "$YES" = 1 ] || fail "$DISK already carries a Zurvan install (re-run with --yes to overwrite)"
