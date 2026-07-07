@@ -15,6 +15,11 @@
   </a>
 </p>
 
+<p align="center">
+  <img src="docs/panel.gif" alt="The Zurvan web admin panel — services, snapshots, jobs, files, packages, system" width="820">
+  <br><em>The built-in web admin panel — over HTTPS, on by default.</em>
+</p>
+
 Zurvan is a from-source Linux system, not a rebranded distribution. Every layer is
 assembled directly in this repository: the kernel is configured and built from source,
 the userland is statically linked (**no dynamic loader ships at all**), the init process
