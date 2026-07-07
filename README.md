@@ -1,12 +1,13 @@
 # Zurvan
 
 > A minimal Linux distribution assembled from scratch — kernel, static userland, a
-> custom PID 1, SSH, and a first-boot YAML provisioner — that boots entirely from RAM
-> and self-configures from a single file.
+> custom PID 1, verified boot, a declarative service supervisor, a static package
+> system, snapshots, a sandboxed job runner, and a web admin panel — that boots
+> entirely from RAM and keeps everything worth keeping on one `/data` partition.
 
 <p align="center">
   <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan.iso">
-    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD-zurvan.iso%20(23%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan.iso">
+    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN%20v2-zurvan.iso%20(~39%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan.iso">
   </a>
   &nbsp;
   <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest">
@@ -14,46 +15,86 @@
   </a>
 </p>
 
-
 Zurvan is a from-source Linux system, not a rebranded distribution. Every layer is
 assembled directly in this repository: the kernel is configured and built from source,
-the userland is statically linked (no dynamic loader ships at all), the init process is
-~200 lines of C you can read top to bottom, and networking is brought up explicitly.
+the userland is statically linked (**no dynamic loader ships at all**), the init process
+is ~200 lines of C you can read top to bottom, and every service — supervisor, snapshot
+daemon, job runner, web panel — is a small static binary meant to be read whole.
 
-Named for the Zoroastrian principle of boundless time — the father of twin opposites —
-the design follows the metaphor: the **source is timeless**, a reproducible image defined
-entirely by this repository, while each **running instance is ephemeral**, booting from
-RAM, configuring itself from one YAML file, and vanishing without a trace on shutdown.
-The disk is never touched.
+Named for the Zoroastrian principle of boundless time, the father of twin opposites,
+v2 makes the system literally two things at once:
 
-v2 (planned in [`ROADMAP.md`](ROADMAP.md)) gives Zurvan its twins. The **snake** is the
-OS itself, shedding its skin on every boot — reborn identical, never drifting, exactly as
-above. The **lion** is what endures: one persistent `/data` partition holding the YAML,
-installed apps, and service state, guarded by a snapshot daemon. The OS is never
-installed — only the data is — so a two-year-old Zurvan server stays provably identical
-to the day it was set up.
+- **The snake — what sheds its skin.** The OS itself. It boots from a signed image into
+  RAM, reborn identical on every boot, and never drifts. The root filesystem is sealed
+  read-only; every boot is a first boot.
+- **The lion — what endures.** One persistent `/data` partition holding your YAML config,
+  installed apps, and service state — guarded by a snapshot daemon. Everything you would
+  cry about losing lives there; everything else is disposable.
+
+**The OS is never installed — only the data is.** A machine is described entirely by three
+things: the image version, one YAML file, and the contents of `/data`. Upgrading is
+replacing one signed image file (with automatic rollback); a two-year-old Zurvan server is
+provably identical to the day it was set up.
 
 ---
 
-## Download & run
+## Try it — live, no install
 
-**[⬇️ zurvan.iso — direct download](https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan.iso)**
-(≈23 MB; the [release page](https://github.com/masoudqashqai/Zurvan-OS/releases/latest) has the SHA-256 checksum).
+Download **[zurvan.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan.iso)**
+and boot it (VMware, QEMU, or real hardware). It comes up entirely in RAM, self-configures
+from its built-in YAML, and starts the **web admin panel** automatically. The console
+prints a banner:
 
-**VMware Workstation**
-1. *Create a New Virtual Machine* → *I will install the operating system later*
-2. Guest OS: **Linux → Other Linux 6.x kernel 64-bit**
-3. Attach `zurvan.iso` to the CD/DVD drive → power on
-
-**QEMU**
-```sh
-qemu-system-x86_64 -cdrom zurvan.iso -m 256               # VGA window
-qemu-system-x86_64 -cdrom zurvan.iso -m 256 -nographic    # serial; pick the 2nd menu entry
+```
+ WEB PANEL:  https://<this-box-ip>:8443/
+ LOGIN TOKEN: <16 hex chars>
 ```
 
-GRUB boots hands-off after 3 seconds. You land at a root `bash` prompt with the
-hostname, network, users, and services already applied from the built-in
-`/etc/zurvan.yaml`. Reboot and it happens again, identically — clean state every time.
+Open that URL in your browser (accept the self-signed certificate — it's per-box and made
+on first boot), paste the token, and you're in. Run `zurvan-panel` on the console anytime
+to print the URL and token again.
+
+Nothing persists in live mode — it's for looking around. To keep data, **install to a disk**.
+
+---
+
+## Install to a disk
+
+Installing writes three things to the disk: the signed boot image (two A/B slots), a small
+boot partition, and the persistent `/data` partition. The OS still runs from RAM after boot;
+only `/data` and the image live on disk.
+
+1. Boot the ISO (as above).
+2. On the console, run the installer against your target disk — this is the **only** program
+   allowed to touch a raw disk:
+
+   ```sh
+   zurvan-install --yes /dev/sda
+   ```
+
+3. Remove the CD and reboot. The box now boots from the disk.
+
+On first boot it generates its SSH host keys and the panel's TLS identity on `/data`, so they
+stay stable across reboots. Edit `/data/zurvan.yaml` (over SSH or in the panel's file editor)
+to set the hostname, network, users, and which services run — then reboot to apply.
+
+Upgrades are equally simple and safe: feed a signed image bundle to `zurvan-upgrade` (or the
+panel's System page). It verifies the signature, writes the *inactive* slot, boots it once,
+and rolls back automatically if that boot fails.
+
+---
+
+## Recommended hardware
+
+Zurvan is tiny, but it is a **BIOS**, **x86-64** system today.
+
+| | |
+|---|---|
+| **CPU** | x86-64 (64-bit). One core is enough. |
+| **Firmware** | **Legacy BIOS** — *not* UEFI. In VMware: VM Settings → Advanced → Firmware type → **BIOS**. (UEFI + Secure Boot is on the post-v2 list.) |
+| **RAM** | 256 MB minimum (the OS runs from RAM); **512 MB – 1 GB** recommended so the panel and per-service tmpfs have headroom. |
+| **Disk** | Any disk for an install. `/data` holds the YAML, installed apps, and snapshots — a few GB is generous. Live (no-disk) boot needs no disk at all. |
+| **Network** | e1000 (VMware's default for "Other Linux") or virtio-net; DHCP by default. |
 
 ---
 
@@ -61,85 +102,74 @@ hostname, network, users, and services already applied from the built-in
 
 | Layer | Implementation |
 |-------|----------------|
-| **Kernel** | Linux 6.6 LTS, built from source; `defconfig` + a [readable fragment](kernel/config-fragment) of the symbols the boot path needs |
-| **Userland** | [busybox](userland/build-busybox.sh) (static — `sh`, `ls`, `ip`, `udhcpc`, `vi`, …), [bash](userland/build-bash.sh) (static), [dropbear](userland/build-dropbear.sh) (static — `sshd`, `ssh`, `scp`) |
-| **Init (PID 1)** | [~200 lines of C](init/init.c): mounts, console, an rc hook, shell supervision, zombie reaping — and it never exits |
-| **Networking** | `udhcpc` DHCP + DNS via a [small hook script](rootfs/etc/udhcpc/default.script) |
-| **Provisioner** | [`zurvan-provision`](packages/provisioner/) — the signature feature, see below |
-| **Packaging** | initramfs (`cpio.gz`) for QEMU direct-boot; GRUB ISO for VMs and BIOS machines |
+| **Kernel** | Linux 6.6 LTS, built from source; a [readable config fragment](kernel/config-fragment) plus a hardening baseline (stack protector, KASLR, no modules, no `/dev/mem`, …) |
+| **Userland** | static [busybox](userland/build-busybox.sh), [bash](userland/build-bash.sh), [dropbear](userland/build-dropbear.sh) (SSH), [e2fsprogs](userland/build-e2fsprogs.sh), [gpgv](userland/build-gpgv.sh), [BearSSL](userland/build-bearssl.sh) — all static |
+| **Init (PID 1)** | [~200 lines of C](init/init.c): mounts, console, supervision, reaping — and it never exits |
+| **Verified boot** | GPG-signed kernel/initrd/modules enforced by GRUB; A/B image slots with a signature-gated `zurvan-upgrade` and automatic rollback; read-only root |
+| **Supervisor** | [`zurvan-svc`](svc/) — a small declarative service manager: dependency order, restart-on-crash, `no_new_privs`, drop-to-user |
+| **Packages** | [`zurvan-pkg`](packages/pkgtool/) — install static-binary packages from a curated [catalog](catalog/); the [set-dresser](packages/pkgtool/) links them into standard paths every boot |
+| **The lion** | [`zurvan-lion`](lion/) — checksummed, atomic `/data` snapshots in a ring buffer; overlay or exact (mirror) restore |
+| **The snake** | [`zurvan-snake`](snake/) — runs jobs in an evaporating tmpfs mount-namespace sandbox; nothing touches the host |
+| **The face** | [`zurvan-face`](face/) — one static binary serving the whole admin panel over HTTPS |
 
-### The signature feature: first-boot provisioning from one YAML
+### The web panel
 
-On every boot (every boot is a first boot), PID 1's rc hook runs the provisioner, which
-reads **one YAML file** and configures the system:
+Everything the panel does is possible over SSH with `vi` and one YAML file — but a server's
+face is a browser tab. Over HTTPS it shows live service state (with listening ports and
+uptime), the lion's snapshots with a restore button, the snake's job runner and history, a
+`/data` file browser and editor (upload, rename, copy, delete), package install/remove,
+signed image upgrades, and reboot. It runs as an ordinary supervised service and can be
+turned off with one line in the YAML.
+
+### Configuration is one YAML file
 
 ```yaml
 hostname: zurvan-box
-
 network:
   eth0:
-    dhcp: false
-    address: 10.0.2.50/24
-    gateway: 10.0.2.2
-    dns:
-      - 10.0.2.3
-
+    dhcp: true
 users:
-  - name: zurvan
-    shell: /bin/bash
+  - name: root
     authorized_keys:
       - "ssh-ed25519 AAAA... your-key"
-
+lion:
+  every: 24h        # snapshot schedule
+  keep: 7
 services:
   - networking
   - ssh
+  - face            # the web panel (on by default)
+  # - lion          # the snapshot daemon
+  # - snake         # the job-queue runner
+  # - nginx         # once installed from the catalog
 ```
 
-The config comes from `/etc/zurvan.yaml` inside the image, or any path given as
-`zurvan.config=<path>` on the kernel cmdline. The implementation is deliberately
-bounded — busybox `sh` + `awk`, a fixed set of keys, a tiny YAML subset, every action
-idempotent. Details in [`packages/provisioner/`](packages/provisioner/).
-
-To SSH into the box, put your public key in
-[`packages/provisioner/example.yaml`](packages/provisioner/example.yaml) and rebuild the
-image (`make rootfs iso`) — dropbear generates host keys on first connection, so there
-is no key ceremony.
+The config lives at `/data/zurvan.yaml` (or the built-in `/etc/zurvan.yaml` when there is
+no disk). Every action is idempotent; it is reapplied on every boot.
 
 ---
 
 ## Building from source
 
-Everything builds on any reasonably current Linux with a C toolchain. Debian/Ubuntu
-prerequisites:
+Any reasonably current Linux with a C toolchain. Debian/Ubuntu prerequisites:
 
 ```sh
 apt install build-essential flex bison libssl-dev libelf-dev bc cpio curl xz-utils \
-            qemu-system-x86 grub-pc-bin xorriso mtools
+            gnupg qemu-system-x86 grub-pc-bin xorriso mtools
 ```
 
 Then, from the repo root:
 
 ```sh
-make help          # list targets
-make kernel        # fetch + configure + build the kernel   (~30 min first time)
-make userland      # static busybox, bash, dropbear
-make init          # compile the C PID 1
-make rootfs        # assemble and pack rootfs.cpio.gz
-make run           # boot it in QEMU -nographic  (exit: Ctrl-A X)
-make iso           # produce build/zurvan.iso
+make all           # kernel + static userland + init/supervisor/lion/snake/face
+make catalog       # build the catalog packages (hello, tick, nginx, …)
+scripts/make-keys.sh   # one-time: generate the image-signing key (kept in keys/, gitignored)
+scripts/make-iso.sh    # produce build/zurvan.iso (signed)
+make run           # boot it in QEMU (-nographic; Ctrl-A X to exit)
 ```
 
-Useful environment variables:
-
-| Variable | Purpose |
-|----------|---------|
-| `ZURVAN_SRC_BASE` | where kernel/userland source trees live — **on WSL, point this at the Linux filesystem** (e.g. `/root/zurvan-src`); building on `/mnt/*` is ~10× slower |
-| `KMIRROR` | alternate kernel download base if `cdn.kernel.org` is unreachable, e.g. `https://mirrors.tuna.tsinghua.edu.cn/kernel` |
-| `KVER`, `BBVER`, `BASHVER`, `DBVER` | pin different component versions |
-| `USE_C_INIT=0` | build the rootfs with the throwaway shell `/init` instead of the C PID 1 (milestone 2 mode) |
-
-**Windows:** build under WSL2 (Ubuntu). Clone anywhere, but set `ZURVAN_SRC_BASE` as
-above. The repo enforces LF line endings via `.gitattributes` — a CRLF shell script
+On **WSL**, set `ZURVAN_SRC_BASE` to a native-ext4 path (e.g. `/root/zurvan-src`); building on
+a `/mnt/*` Windows mount is ~10× slower. The repo enforces LF line endings — a CRLF script
 inside the image would break the boot chain.
 
 ---
@@ -148,38 +178,32 @@ inside the image would break the boot chain.
 
 ```
 kernel/      config fragment + build script
-userland/    busybox, bash, dropbear build scripts (all static)
-init/        PID 1 source (C) + Makefile
-rootfs/      skeleton /etc, rc.init, udhcpc hook
-packages/    the first-boot provisioner (signature feature)
-scripts/     rootfs assembly, QEMU runner, ISO builder
-Makefile     top-level orchestration: kernel → userland → init → rootfs → run/iso
-ROADMAP.md   deliberately deferred features
+userland/    busybox, bash, dropbear, e2fsprogs, gpgv, BearSSL (all static)
+init/        PID 1 source (C)
+svc/  lion/  snake/  face/   the C daemons (supervisor, snapshots, jobs, panel)
+packages/    installer, package tool, first-boot YAML provisioner
+catalog/     build-<name>.sh recipes for static-binary packages
+scripts/     rootfs assembly, key/sign, ISO builder, QEMU runner
+tests/       per-milestone "done when" acceptance suites (QEMU)
+docs/        milestone-by-milestone build notes
+ROADMAP.md   the road to v2 (all six milestones done)
 ```
 
 ## Design principles
 
-- **Bounded scope.** Each piece does one thing and is small enough to read whole. The
-  provisioner parses a YAML *subset*; the init supervises *one* shell; features that
-  don't fit are in [`ROADMAP.md`](ROADMAP.md), not half-implemented here.
-- **Verified, not assumed.** Every layer was brought up bottom-up with an observable
-  check: the kernel's no-init panic, the busybox prompt, `/proc/1/comm`, a DHCP lease,
-  a DNS lookup, an SSH session on `/dev/pts/0`.
-- **The parts worth understanding are the parts you must touch.** Kernel config and
-  PID 1 behavior fail without friendly errors — both are kept small and documented so
-  they can be reasoned about rather than trusted.
+- **Bounded scope.** Each piece does one thing and is small enough to read whole.
+- **Static or it is not a package.** No dynamic loader, no shared libraries, no dependency hell.
+- **Verified, not assumed.** Every layer was brought up with an observable check; every
+  milestone has a reproducible acceptance test in [`tests/`](tests/).
+- **The disk is never the OS.** Root is RAM-backed and reborn each boot; only `/data` and the
+  signed image endure.
 
 ## Roadmap
 
-The road to v2 is sequenced in [`ROADMAP.md`](ROADMAP.md) as six bounded milestones:
-a persistent `/data` partition with installable static packages (the memory box — done),
-a tiny declarative service supervisor, **the seal** (verified boot: signed images,
-A/B slots with automatic rollback, enforced read-only root, hardening baseline),
-**lion** (a snapshot daemon guarding `/data`), **snake** (a job runner in evaporating
-tmpfs sandboxes), and an optional web admin panel. Beyond v2: image/container duality,
-TPM-sealed keys, and a Microsoft-signed shim.
+All six v2 milestones are done and boot-verified — see [`ROADMAP.md`](ROADMAP.md). Deferred
+beyond v2: UEFI + enroll-your-own-key Secure Boot, TPM-sealed keys, and image/container duality.
 
 ## License
 
-[MIT](LICENSE). The components Zurvan builds from source (Linux, busybox, bash,
-dropbear) keep their own upstream licenses.
+[MIT](LICENSE). The components Zurvan builds from source (Linux, busybox, bash, dropbear,
+e2fsprogs, GnuPG, BearSSL, nginx) keep their own upstream licenses.
