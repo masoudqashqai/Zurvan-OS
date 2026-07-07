@@ -26,7 +26,15 @@ users:
     authorized_keys:
       - "ssh-ed25519 AAAA... example-key"
 
+# lion — the /data snapshot daemon (v2 M4). Snapshots land in /data/lion/ as
+# checksummed tar.gz ring buffer; restore with: zurvan-lion restore <name>.
+# every accepts s/m/h/d suffixes. Defaults shown; enable with "- lion" below.
+# lion:
+#   every: 24h
+#   keep: 7
+
 services:
   # names the provisioner knows how to start; bounded set, not arbitrary units
   - networking
   - ssh
+  # - lion

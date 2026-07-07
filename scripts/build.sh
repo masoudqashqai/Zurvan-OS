@@ -138,6 +138,14 @@ if [ ! -x "$SVC_BIN" ]; then
 fi
 cp "$SVC_BIN" "$ROOTFS_OUT/sbin/zurvan-svc"
 
+# --- zurvan-lion: the /data snapshot daemon (v2 milestone 4) --------------------
+LION_BIN="$HERE/lion/zurvan-lion"
+if [ -x "$LION_BIN" ]; then
+	cp "$LION_BIN" "$ROOTFS_OUT/sbin/zurvan-lion"
+else
+	echo "!! no zurvan-lion at $LION_BIN — image ships without the snapshot daemon" >&2
+fi
+
 # --- /init ------------------------------------------------------------------
 if [ "$USE_C_INIT" = "1" ]; then
 	if [ ! -x "$INIT_BIN" ]; then

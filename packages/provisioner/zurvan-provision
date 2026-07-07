@@ -184,6 +184,21 @@ for i in $(indices users); do
 	fi
 done
 
+# --- lion: the /data snapshot daemon (v2 milestone 4) --------------------------
+# Digest the YAML lion: block into a flat /run/lion.conf for the C daemon
+# (which, like zurvan-svc, parses no YAML). Absent keys = daemon defaults
+# (every=24h, keep=7). The daemon itself is enabled like any other service:
+# "- lion" under services:.
+every="$(get lion.every)"
+keep="$(get lion.keep)"
+if [ -n "$every$keep" ]; then
+	{
+		[ -n "$every" ] && echo "every=$every"
+		[ -n "$keep" ]  && echo "keep=$keep"
+	} > /run/lion.conf
+	log "lion: every=${every:-24h (default)} keep=${keep:-7 (default)}"
+fi
+
 # --- services -----------------------------------------------------------------
 # The provisioner no longer starts daemons (that's zurvan-svc's job, v2 M2);
 # it ENABLES them by name in /run/svc/enabled, which the supervisor — spawned

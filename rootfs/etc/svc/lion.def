@@ -1,0 +1,7 @@
+# The lion — /data snapshot daemon (v2 milestone 4). Enable with "- lion"
+# under services: in the YAML; configure with a lion: block (every/keep),
+# which the provisioner digests into /run/lion.conf.
+# Runs as root on purpose: it must read every service's state under
+# /data/srv regardless of owner, and restores must put ownership back.
+exec=/sbin/zurvan-lion daemon
+restart=yes

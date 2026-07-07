@@ -181,7 +181,13 @@ refuses password auth unless the YAML asked for it.
 
 ---
 
-## Milestone 4 — the lion: guardian of `/data`
+## Milestone 4 — the lion: guardian of `/data` ✅
+
+**Done (2026-07-07).** Verified in QEMU (tests/m4-lion.sh): the supervised daemon
+takes its first snapshot at boot and follows the YAML schedule; a deleted file
+comes back with `zurvan-lion restore`; a corrupted archive fails its checksum and
+is refused; the ring holds at `keep`; and on a nearly-full disk the lion eats its
+own oldest snapshot — sparing the newest — and the new snapshot still lands.
 
 A small C daemon whose only job is protecting the memory box. It runs as an
 ordinary supervised service.
@@ -266,8 +272,8 @@ and edit the YAML — with the panel itself installed like any other package.
 ## Sequencing
 
 ```
-M1 memory box ✅ →  M2 supervisor ✅ →  M3 seal ✅ →  M4 lion  ─┐
-                                                     M5 snake ─┴→  M6 face (optional)
+M1 memory box ✅ →  M2 supervisor ✅ →  M3 seal ✅ →  M4 lion ✅ ─┐
+                                                       M5 snake ─┴→  M6 face (optional)
 ```
 
 M1–M3 are load-bearing and ordered: the seal's service hardening lands in the

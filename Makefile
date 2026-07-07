@@ -44,9 +44,10 @@ userland: ## Build static busybox, bash, dropbear, e2fsprogs, and gpgv
 	@userland/build-e2fsprogs.sh
 	@userland/build-gpgv.sh
 
-init: ## Compile the C PID 1 and the zurvan-svc supervisor
+init: ## Compile the C PID 1, the zurvan-svc supervisor, and the lion
 	@$(MAKE) -C init
 	@$(MAKE) -C svc
+	@$(MAKE) -C lion
 
 rootfs: ## Assemble rootfs/ and pack rootfs.cpio.gz
 	@scripts/build.sh
@@ -66,6 +67,7 @@ clean: ## Remove the assembled rootfs and initramfs
 	@rm -rf "$(BUILD)"
 	@$(MAKE) -C init clean
 	@$(MAKE) -C svc clean
+	@$(MAKE) -C lion clean
 
 distclean: clean ## Also remove kernel/userland build trees
 	@rm -rf kernel/build kernel/src userland/build userland/src
