@@ -33,12 +33,14 @@ daemon, job runner, web panel — is a small static binary meant to be read whol
 Named for the Zoroastrian principle of boundless time, the father of twin opposites,
 v2 makes the system literally two things at once:
 
-- **The snake — what sheds its skin.** The OS itself. It boots from a signed image into
-  RAM, reborn identical on every boot, and never drifts. The root filesystem is sealed
-  read-only; every boot is a first boot.
+- **The snake — what sheds its skin.** The OS itself: booted from a signed image into
+  RAM, reborn identical on every boot, root sealed read-only — it never drifts, and every
+  boot is a first boot. Its instrument is [`zurvan-snake`](snake/), which puts that
+  ephemerality to work — running jobs in sandboxes that evaporate without a trace.
 - **The lion — what endures.** One persistent `/data` partition holding your YAML config,
-  installed apps, and service state — guarded by a snapshot daemon. Everything you would
-  cry about losing lives there; everything else is disposable.
+  installed apps, and service state. Its instrument is [`zurvan-lion`](lion/), the
+  snapshot daemon that guards it — everything you would cry about losing lives under the
+  lion's watch; everything else is disposable.
 
 **The OS is never installed — only the data is.** A machine is described entirely by three
 things: the image version, one YAML file, and the contents of `/data`. Upgrading is
