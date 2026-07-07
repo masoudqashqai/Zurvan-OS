@@ -112,27 +112,38 @@ else
 	set trial=$active
 fi
 if [ "$trial" = "b" ]; then set standby=a; else set standby=b; fi
+# submenu bodies run in a nested scope that inherits only EXPORTED variables,
+# so the serial entries inside "Advanced" would otherwise see an empty $trial.
+export trial standby
 
+# Menu ordering is load-bearing, not cosmetic: default=0 boots the trial slot,
+# and fallback=1 boots the standby slot when entry 0 fails to load (bad
+# signature, missing file) — that is the automatic rollback. So the first two
+# top-level entries MUST stay "trial" then "standby", in this order. The
+# serial-console variants live in a submenu (entry 2) to keep the everyday menu
+# to two clear choices; placing them AFTER the fallback entry leaves the
+# rollback index untouched.
 set default=0
-# Load failure (bad signature, missing file) falls through immediately:
 set fallback=1
 set timeout=10
 
-menuentry "Zurvan (slot $trial)" {
+menuentry "Zurvan" {
 	linux  /boot/slot-$trial/bzImage console=tty0 panic=10 zurvan.slot=$trial
 	initrd /boot/slot-$trial/initrd.img
 }
-menuentry "Zurvan (slot $standby)" {
+menuentry "Zurvan (previous image / rollback)" {
 	linux  /boot/slot-$standby/bzImage console=tty0 panic=10 zurvan.slot=$standby
 	initrd /boot/slot-$standby/initrd.img
 }
-menuentry "Zurvan (slot $trial, serial console)" {
-	linux  /boot/slot-$trial/bzImage console=ttyS0 panic=10 zurvan.slot=$trial
-	initrd /boot/slot-$trial/initrd.img
-}
-menuentry "Zurvan (slot $standby, serial console)" {
-	linux  /boot/slot-$standby/bzImage console=ttyS0 panic=10 zurvan.slot=$standby
-	initrd /boot/slot-$standby/initrd.img
+submenu "Advanced (serial console)" {
+	menuentry "Zurvan (serial console)" {
+		linux  /boot/slot-$trial/bzImage console=ttyS0 panic=10 zurvan.slot=$trial
+		initrd /boot/slot-$trial/initrd.img
+	}
+	menuentry "Zurvan (previous image, serial console)" {
+		linux  /boot/slot-$standby/bzImage console=ttyS0 panic=10 zurvan.slot=$standby
+		initrd /boot/slot-$standby/initrd.img
+	}
 }
 CFG
 "$SIGN" "$STAGE/install/grub-disk.cfg"

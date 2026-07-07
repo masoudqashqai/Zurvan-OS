@@ -37,6 +37,10 @@ services:
   # names the provisioner knows how to start; bounded set, not arbitrary units
   - networking
   - ssh
+  # face — the web admin panel (v2 M6), ON by default. HTTPS on :8443 with a
+  # per-box cert; the admin token is printed to the console at first boot.
+  # Remove this line to run headless-only over SSH.
+  - face
   # - lion
   # snake — job-queue daemon (v2 M5): runs files dropped in /data/snake/queue
   # in evaporating sandboxes; results in /data/snake/results. One-off jobs

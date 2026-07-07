@@ -248,6 +248,56 @@ for i in $(indices services); do
 				log "service ssh: dropbear not in this image"
 			fi
 			;;
+		face)
+			# The web panel (v2 M6). Its TLS identity + admin token live on
+			# /data when a disk is present (persistent, per-box, survives
+			# reboots like the SSH host keys) — or on tmpfs for a diskless
+			# "live" boot (ephemeral, regenerated each boot). Either way the
+			# token is printed to the console so first login needs no lookup.
+			# certgen builds a self-signed P-256 cert from scratch (no OpenSSL).
+			if command -v zurvan-face >/dev/null 2>&1; then
+				if mountpoint -q /data 2>/dev/null; then
+					fdir=/data/face; fmode=persistent
+				else
+					fdir=/run/face;  fmode=live
+				fi
+				mkdir -p "$fdir"; chmod 700 "$fdir"
+				if [ ! -f "$fdir/cert.der" ] || [ ! -f "$fdir/key.der" ]; then
+					zurvan-certgen "$fdir" && log "face: generated TLS identity ($fmode)"
+				fi
+				if [ ! -f "$fdir/token" ]; then
+					# 8 bytes = 16 hex chars: strong (64-bit) but still typeable
+					# from a console at first login.
+					od -An -tx1 -N8 /dev/urandom | tr -d ' \n' > "$fdir/token"
+					chmod 600 "$fdir/token"
+				fi
+				tok="$(cat "$fdir/token" 2>/dev/null)"
+				ip4="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)"
+				# the panel reads its dir from --dir; /run/svc wins over /etc/svc
+				mkdir -p /run/svc
+				printf 'exec=/sbin/zurvan-face --dir %s\nafter=networking\nrestart=yes\n' \
+					"$fdir" > /run/svc/face.def
+				# a tiny command to re-print the URL + token after the boot banner
+				# has scrolled off or the screen was cleared (e.g. by a full-screen
+				# program). Recreated each boot on the RAM root, before the seal.
+				cat > /usr/bin/zurvan-panel <<'PANEL'
+#!/bin/sh
+for d in /data/face /run/face; do [ -f "$d/token" ] && t="$(cat "$d/token")" && break; done
+ip="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)"
+echo "Web panel:   https://${ip:-<this-box>}:8443/"
+echo "Login token: ${t:-<none>}"
+PANEL
+				chmod +x /usr/bin/zurvan-panel
+				log "======================================================"
+				log " WEB PANEL:  https://${ip4:-<this-box>}:8443/"
+				log " LOGIN TOKEN: $tok   ($fmode)"
+				log " (run 'zurvan-panel' anytime to show this again)"
+				log "======================================================"
+				enable_svc face
+			else
+				log "service face: zurvan-face not in this image (skipped)"
+			fi
+			;;
 		*)
 			enable_svc "$svc"
 			;;

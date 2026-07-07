@@ -102,6 +102,16 @@ E corrupted archive refused; F ring holds at exactly keep=3; G with ~60 MB
 free the lion logged `deleted lion-… (making room)`, spared the newest, and
 landed the new snapshot (COUNT=2). MILESTONE 4 DONE-WHEN: PASS.
 
+## Follow-up (2026-07-08): mirror restore
+Default `restore` overlays (files added since the snapshot are kept) — the safe
+guardian default. Added `zurvan-lion restore --mirror <name>` (and a red
+"Mirror" button in the panel) that makes /data **exactly** the snapshot,
+deleting files created after it. Implemented extract-to-scratch → wipe /data
+(except the snapshot dir) → rename the extracted tree in, so a tar failure
+never deletes anything. Uses `nftw` for recursive remove. Requested after a
+user noticed overlay-restore leaves newer files behind — which is correct, but
+sometimes you want an exact rewind.
+
 ## Deferred / rabbit holes avoided
 Grandfather-father-son retention stays post-v2 (ring buffer is predictable
 by inspection). No filesystem-level snapshots (plain ext4; archives are

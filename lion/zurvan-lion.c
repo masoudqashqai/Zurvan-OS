@@ -41,16 +41,22 @@
  *   zurvan-lion daemon           supervised mode: snapshot on schedule
  *   zurvan-lion snap             take one snapshot now
  *   zurvan-lion list             list snapshots
- *   zurvan-lion restore <name>   verify + unpack <name> over /data
+ *   zurvan-lion restore <name>            unpack <name> OVER /data (overlay):
+ *                                         files in the snapshot come back;
+ *                                         files added since are kept.
+ *   zurvan-lion restore --mirror <name>   make /data EXACTLY the snapshot:
+ *                                         files added since are DELETED. Its
+ *                                         own snapshot dir is always preserved.
  */
 
-#define _POSIX_C_SOURCE 200809L   /* popen, gmtime_r, fileno under -std=c11 */
+#define _XOPEN_SOURCE 700         /* nftw; also popen, gmtime_r, fileno, statvfs */
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <ftw.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -392,7 +398,16 @@ static int snapshot(void)
 
 /* --- restore ------------------------------------------------------------------ */
 
-static int restore(const char *arg)
+/* recursive remove (depth-first, don't follow symlinks) */
+static int rm_cb(const char *p, const struct stat *s, int t, struct FTW *f)
+{
+	(void)s; (void)t; (void)f;
+	remove(p);
+	return 0;
+}
+static void rm_rf(const char *path) { nftw(path, rm_cb, 16, FTW_DEPTH | FTW_PHYS); }
+
+static int restore(const char *arg, int mirror)
 {
 	/* Accept "lion-STAMP", bare "STAMP", or a full filename; then validate
 	 * hard — this string ends up in paths. */
@@ -424,14 +439,70 @@ static int restore(const char *arg)
 		lion_log("ERROR: %s fails its checksum — corrupt, refusing to restore", name);
 		return -1;
 	}
-	lion_log("checksum verified; restoring %s over " DATA_DIR, name);
+	if (!mirror) {
+		/* Overlay: unpack over /data. Files in the snapshot come back;
+		 * anything created since is left untouched. The safe default. */
+		lion_log("checksum verified; restoring %s over " DATA_DIR " (overlay)", name);
+		char *tar_argv[] = { "tar", "-xzf", arch, "-C", DATA_DIR, NULL };
+		if (run(tar_argv) != 0) {
+			lion_log("ERROR: unpack failed — /data may be partially restored");
+			return -1;
+		}
+		lion_log("restore done. Restart affected services (or reboot) to pick it up.");
+		return 0;
+	}
 
-	char *tar_argv[] = { "tar", "-xzf", arch, "-C", DATA_DIR, NULL };
-	if (run(tar_argv) != 0) {
-		lion_log("ERROR: unpack failed — /data may be partially restored");
+	/* Mirror: make /data EXACTLY the snapshot. Extract to a scratch dir first,
+	 * then delete everything in /data (except our own snapshot dir) and move
+	 * the extracted tree into place. Extract-first means a tar failure never
+	 * deletes anything. This DISCARDS files created after the snapshot. */
+	lion_log("checksum verified; MIRROR-restoring %s (extra files will be removed)", name);
+	char tmp[PATH_LEN];
+	snprintf(tmp, sizeof tmp, DATA_DIR "/.lion-restore.%d", (int)getpid());
+	rm_rf(tmp);
+	if (mkdir(tmp, 0700) != 0) {
+		lion_log("ERROR: cannot make scratch dir — aborted, nothing changed");
 		return -1;
 	}
-	lion_log("restore done. Restart affected services (or reboot) to pick it up.");
+	char *ex_argv[] = { "tar", "-xzf", arch, "-C", tmp, NULL };
+	if (run(ex_argv) != 0) {
+		rm_rf(tmp);
+		lion_log("ERROR: unpack failed — aborted, /data untouched");
+		return -1;
+	}
+
+	/* wipe /data except the snapshot dir (lion) and our scratch dir */
+	DIR *d = opendir(DATA_DIR);
+	if (d) {
+		struct dirent *e;
+		while ((e = readdir(d))) {
+			if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..") ||
+			    !strcmp(e->d_name, "lion"))
+				continue;
+			char p[PATH_LEN];
+			snprintf(p, sizeof p, DATA_DIR "/%s", e->d_name);
+			if (strcmp(p, tmp) == 0)
+				continue;
+			rm_rf(p);
+		}
+		closedir(d);
+	}
+	/* move the snapshot's contents into /data (same filesystem: atomic renames) */
+	d = opendir(tmp);
+	if (d) {
+		struct dirent *e;
+		while ((e = readdir(d))) {
+			if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
+				continue;
+			char src[PATH_LEN + 288], dst[PATH_LEN + 288];
+			snprintf(src, sizeof src, "%s/%s", tmp, e->d_name);
+			snprintf(dst, sizeof dst, DATA_DIR "/%s", e->d_name);
+			rename(src, dst);
+		}
+		closedir(d);
+	}
+	rm_rf(tmp);
+	lion_log("mirror restore done: " DATA_DIR " now matches %s. Restart services or reboot.", name);
 	return 0;
 }
 
@@ -554,10 +625,15 @@ int main(int argc, char **argv)
 	}
 	if (strcmp(cmd, "list") == 0)
 		return list();
-	if (strcmp(cmd, "restore") == 0 && argc > 2)
-		return restore(argv[2]) == 0 ? 0 : 1;
+	if (strcmp(cmd, "restore") == 0) {
+		/* restore [--mirror] <name> */
+		int mirror = 0, i = 2;
+		if (argc > 2 && strcmp(argv[2], "--mirror") == 0) { mirror = 1; i = 3; }
+		if (i < argc)
+			return restore(argv[i], mirror) == 0 ? 0 : 1;
+	}
 
 	fprintf(stderr,
-	        "usage: zurvan-lion daemon | snap | list | restore <name>\n");
+	        "usage: zurvan-lion daemon | snap | list | restore [--mirror] <name>\n");
 	return 2;
 }

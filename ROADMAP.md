@@ -255,7 +255,17 @@ output comes back, and the running system shows no trace it ever ran.
 
 ---
 
-## Milestone 6 — the face: a web admin panel (the victory lap)
+## Milestone 6 — the face: a web admin panel (the victory lap) ✅
+
+**Done (2026-07-08).** Verified in QEMU (tests/m6-face.sh): one static binary
+(`zurvan-face`) serves the panel over HTTPS from a per-box, first-boot cert
+(`zurvan-certgen`, BearSSL + a hand-rolled self-signed cert; no OpenSSL). It is
+ON by default, token-authenticated, and a thin face over the existing CLIs —
+service state (with live ports + uptimes), lion snapshots with overlay/mirror
+restore, the snake Run box + job history, a /data file browser/editor (uploads,
+rename, copy, delete), package upload/install/remove, signed A/B upgrades, and
+reboot. **This completes v2.** A real catalog example ships too: a fully static
+`nginx` (catalog/build-nginx.sh).
 
 **Not necessary — and that's the point of putting it last.** Everything the panel
 does is already possible over SSH with `vi` and one YAML file, so v2 can ship
@@ -281,7 +291,12 @@ and edit the YAML — with the panel itself installed like any other package.
 
 ```
 M1 memory box ✅ →  M2 supervisor ✅ →  M3 seal ✅ →  M4 lion ✅ ──┐
-                                                     M5 snake ✅ ─┴→  M6 face (optional)
+                                                     M5 snake ✅ ─┴→  M6 face ✅
+```
+
+**v2 is complete** — all six milestones done and boot-verified.
+
+```
 ```
 
 M1–M3 are load-bearing and ordered: the seal's service hardening lands in the

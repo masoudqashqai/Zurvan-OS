@@ -1,0 +1,25 @@
+# Zurvan readline defaults — make TAB completion predictable and friendly.
+#
+# IMPORTANT: readline does NOT support comments on the same line as a directive
+# — it treats the trailing text as part of the value (which errors on enums and
+# silently turns booleans off). So every comment here is on its own line.
+
+# One TAB immediately lists all matches, instead of a silent bell that only
+# lists on a second TAB (which reads as "sometimes it completes, sometimes not"):
+set show-all-if-ambiguous on
+set show-all-if-unmodified on
+
+# Complete regardless of case:
+set completion-ignore-case on
+
+# Informative, colourful listings:
+set colored-stats on
+set mark-symlinked-directories on
+set visible-stats on
+
+# No terminal bell on an ambiguous completion:
+set bell-style none
+
+# Up / Down search history by the prefix already typed on the line:
+"\e[A": history-search-backward
+"\e[B": history-search-forward

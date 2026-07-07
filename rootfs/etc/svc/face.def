@@ -1,0 +1,8 @@
+# The face — web admin panel (v2 milestone 6). Serves HTTPS on :8443 from the
+# per-box TLS identity in /data/face (made at first boot by zurvan-certgen).
+# Enabled by default in the shipped config; remove "- face" from services: to
+# turn it off. Runs as root: it binds a low-ish port and drives the same
+# root-only tools an SSH admin would (zurvan-svc/lion/snake/pkg/upgrade).
+exec=/sbin/zurvan-face
+after=networking
+restart=yes

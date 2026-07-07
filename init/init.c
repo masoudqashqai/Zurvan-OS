@@ -182,6 +182,11 @@ int main(void)
 	run_rc();
 
 	pid_t svc   = spawn_svc();
+	/* Let the supervisor print its first service-start lines before the
+	 * interactive prompt appears, so boot logs don't land on top of the
+	 * shell prompt. Only the initial spawn waits; respawns stay immediate. */
+	if (svc > 0)
+		sleep(1);
 	pid_t shell = spawn_shell();
 
 	/*

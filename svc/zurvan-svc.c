@@ -308,10 +308,64 @@ static void start_due(void)
 	}
 }
 
+/* --- query/control subcommands (used by the web panel and by hand) ---------- */
+/* These run as SEPARATE short-lived processes, not the supervisor itself, so
+ * they reconstruct state from /run/svc rather than shared memory: the enabled
+ * list, each service's pid file, and a liveness check. */
+
+static int pid_alive(const char *name)
+{
+	char path[LINE_LEN];
+	snprintf(path, sizeof path, "/run/svc/%s.pid", name);
+	FILE *f = fopen(path, "r");
+	if (!f)
+		return 0;
+	int pid = 0;
+	if (fscanf(f, "%d", &pid) != 1) pid = 0;
+	fclose(f);
+	return pid > 0 && kill(pid, 0) == 0 ? pid : 0;
+}
+
+/* One "name pid state" line per enabled service; the panel parses these. */
+static int cmd_state(void)
+{
+	FILE *f = fopen("/run/svc/enabled", "r");
+	if (!f)
+		return 0;
+	char line[LINE_LEN];
+	while (fgets(line, sizeof line, f)) {
+		chomp(line);
+		if (!line[0] || line[0] == '#')
+			continue;
+		int pid = pid_alive(line);
+		printf("%s %d %s\n", line, pid, pid ? "up" : "down");
+	}
+	fclose(f);
+	return 0;
+}
+
+/* Kill a service; the supervisor reaps it and respawns per its backoff. */
+static int cmd_restart(const char *name)
+{
+	int pid = pid_alive(name);
+	if (pid <= 0) {
+		fprintf(stderr, "%s is not running (the supervisor starts it when due)\n", name);
+		return 1;
+	}
+	kill(pid, SIGTERM);
+	printf("restart signalled for %s (pid %d)\n", name, pid);
+	return 0;
+}
+
 /* --- main ---------------------------------------------------------------------- */
 
-int main(void)
+int main(int argc, char **argv)
 {
+	if (argc > 1 && strcmp(argv[1], "state") == 0)
+		return cmd_state();
+	if (argc > 1 && strcmp(argv[1], "restart") == 0 && argc > 2)
+		return cmd_restart(argv[2]);
+
 	/* PID 1 respawns us if we die; don't die for trivia. */
 	signal(SIGINT,  SIG_IGN);
 	signal(SIGHUP,  SIG_IGN);

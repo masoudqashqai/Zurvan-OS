@@ -29,11 +29,13 @@ echo "=== install from CD ==="
 tr -d '\0' < "$LOGDIR/inst.log" | grep -a '\[install\]' | tail -3
 tr -d '\0' < "$LOGDIR/inst.log" | grep -aq '\[install\] done' || { echo "FAIL: install"; exit 1; }
 
-boot_serial() {   # $1 log — pick menu entry 2 (trial slot, serial console)
+boot_serial() {   # $1 log — open the "Advanced" submenu (entry 2), boot its
+                  # first item (trial slot, serial console)
     {
-        sleep 2;   printf '\033[B'
-        sleep 1;   printf '\033[B'
-        sleep 1;   printf '\r'
+        sleep 2;   printf '\033[B'    # -> entry 1 (previous image)
+        sleep 1;   printf '\033[B'    # -> entry 2 (Advanced submenu)
+        sleep 1;   printf '\r'        # open the submenu
+        sleep 2;   printf '\r'        # boot its first entry (trial, serial)
         sleep 40
         printf 'poweroff -f\n'; sleep 5
     } | timeout 120 qemu-system-x86_64 -m 256 \

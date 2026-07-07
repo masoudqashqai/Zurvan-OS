@@ -154,6 +154,15 @@ else
 	echo "!! no zurvan-snake at $SNAKE_BIN — image ships without the job runner" >&2
 fi
 
+# --- zurvan-face + zurvan-certgen: the web admin panel (v2 milestone 6) ----------
+for tool in zurvan-face zurvan-certgen; do
+	if [ -x "$HERE/face/$tool" ]; then
+		cp "$HERE/face/$tool" "$ROOTFS_OUT/sbin/$tool"
+	else
+		echo "!! no $tool at face/$tool — image ships without the web panel" >&2
+	fi
+done
+
 # --- /init ------------------------------------------------------------------
 if [ "$USE_C_INIT" = "1" ]; then
 	if [ ! -x "$INIT_BIN" ]; then
