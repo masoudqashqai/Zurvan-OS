@@ -84,31 +84,45 @@ def lion():
     g.append("</g>")
     return "\n".join(g)
 
-# ---------- snake: spiral coil, head rising toward the lion ----------
+# ---------- snake: ouroboros ring around a crescent moon ----------
+# the lion is the sun; the snake is the moon. Fully contained in the teal lobe.
 SCX, SCY = 0, r
 def snake():
     g = [f'<g transform="translate({SCX},{SCY})">']
-    # archimedean spiral: 2 turns, ending at the TOP of the coil moving +x
-    turns = 2.0
-    a0, a1 = -90, -90 + 360 * turns
-    r0, r1 = 13, 98
-    steps = 140
+    RING, SW = 100, 27
+    HEAD_A, TAIL_A = -64, -116          # gap at the top; head right end, tail left end
+    # body: from the head end, the long way round (through the bottom) to the tail end
+    steps = 120
     d = []
+    sweep = 360 - (HEAD_A - TAIL_A)          # everything except the top gap
     for i in range(steps + 1):
-        t = i / steps
-        a = a0 + (a1 - a0) * t
-        rad = r0 + (r1 - r0) * t
-        x, y = pt(a, rad)
+        a = HEAD_A + sweep * (i / steps)     # increasing angle = clockwise on screen
+        x, y = pt(a, RING)
         d.append(f"{'M' if i == 0 else 'L'} {P(x, y)}")
-    # neck: continue from coil top (0,-98) rightward, then rise toward the lion
-    d.append("C 46 -96 74 -114 74 -158")
-    g.append(path(" ".join(d), stroke=DARK, sw=26))
-    # head at (74,-158), pointing straight up
-    g.append('<g transform="translate(74,-158) rotate(-90)">')
-    g.append(path("M -10 -17 C 26 -19 46 -8 52 0 C 46 8 26 19 -10 17 Z", fill=DARK))
-    g.append(f'<circle cx="24" cy="-5" r="6.5" fill="{GOLD_A}"/>')   # gold eye: the second seed
-    g.append(path("M 52 0 L 66 0 M 66 0 L 75 -6 M 66 0 L 75 6", stroke=TEAL_LINE, sw=4.5))
-    g.append("</g></g>")
+    g.append(path(" ".join(d), stroke=DARK, sw=SW))
+    # tail: taper to a point past the tail end, curving into the gap
+    t0o = pt(TAIL_A, RING + SW / 2); t0i = pt(TAIL_A, RING - SW / 2)
+    tipa = TAIL_A + 26
+    tip = pt(tipa, RING - 4)
+    c_o = pt(TAIL_A + 14, RING + SW * 0.36)
+    c_i = pt(TAIL_A + 14, RING - SW * 0.36)
+    g.append(path(f"M {P(*t0o)} Q {P(*c_o)} {P(*tip)} Q {P(*c_i)} {P(*t0i)} Z", fill=DARK))
+    # head at the head end, facing the tail across the gap (tangent, decreasing angle)
+    hx, hy = pt(HEAD_A, RING)
+    ha = math.radians(HEAD_A)
+    ang = math.degrees(math.atan2(-math.cos(ha), math.sin(ha)))
+    g.append(f'<g transform="translate({P(hx, hy).replace(" ", ",")}) rotate({fmt(ang)})">')
+    g.append(path("M -8 -18 C 28 -20 48 -9 55 0 C 48 9 28 20 -8 18 Z", fill=DARK))
+    g.append(f'<circle cx="26" cy="-6" r="7" fill="{GOLD_A}"/>')     # gold eye: the second seed
+    g.append(path("M 55 0 L 68 0 M 68 0 L 77 -6 M 68 0 L 77 6", stroke=TEAL_LINE, sw=4.5))
+    g.append("</g>")
+    # the crescent moon inside the ring, opening toward the lion (up)
+    g.append('<g transform="rotate(24)">'
+             + path("M 15 -48 A 50 50 0 1 0 15 48 A 63 63 0 0 1 15 -48 Z", fill=DARK)
+             + "</g>")
+    # a small four-point star in the crescent's hollow
+    g.append(path("M 30 -8 L 35 4 L 47 9 L 35 14 L 30 26 L 25 14 L 13 9 L 25 4 Z", fill=DARK))
+    g.append("</g>")
     return "\n".join(g)
 
 # ---------- outer ring + 12 time-ticks ----------
