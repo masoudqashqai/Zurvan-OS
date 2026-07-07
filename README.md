@@ -1,5 +1,9 @@
 # Zurvan
 
+<p align="center">
+  <img src="artwork/zurvan-logo.svg" alt="Zurvan OS — the lion and the snake, the twins of boundless time" width="230">
+</p>
+
 > A minimal Linux distribution assembled from scratch — kernel, static userland, a
 > custom PID 1, verified boot, a declarative service supervisor, a static package
 > system, snapshots, a sandboxed job runner, and a web admin panel — that boots
