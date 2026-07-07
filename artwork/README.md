@@ -32,7 +32,7 @@ python3 generate.py
 
 ## Palette
 
-| | Hex | Meaning |
+| Color | Hex | Meaning |
 |---|-----|---------|
 | Gold | `#f6c65b` → `#b97b16` | the lion — permanence, `/data`, what endures |
 | Teal | `#3ecfba` → `#0d7a70` | the snake — ephemerality, the OS reborn each boot |
