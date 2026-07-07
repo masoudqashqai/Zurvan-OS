@@ -146,6 +146,14 @@ else
 	echo "!! no zurvan-lion at $LION_BIN — image ships without the snapshot daemon" >&2
 fi
 
+# --- zurvan-snake: the disposable job runner (v2 milestone 5) -------------------
+SNAKE_BIN="$HERE/snake/zurvan-snake"
+if [ -x "$SNAKE_BIN" ]; then
+	cp "$SNAKE_BIN" "$ROOTFS_OUT/sbin/zurvan-snake"
+else
+	echo "!! no zurvan-snake at $SNAKE_BIN — image ships without the job runner" >&2
+fi
+
 # --- /init ------------------------------------------------------------------
 if [ "$USE_C_INIT" = "1" ]; then
 	if [ ! -x "$INIT_BIN" ]; then

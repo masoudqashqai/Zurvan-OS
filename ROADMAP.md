@@ -223,7 +223,15 @@ rather than fail.
 
 ---
 
-## Milestone 5 — the snake: work that leaves no trace
+## Milestone 5 — the snake: work that leaves no trace ✅
+
+**Done (2026-07-07).** Verified in QEMU (tests/m5-snake.sh): a job that wrote
+garbage into /tmp, /data, and /run, deleted a file from its view of /data, and
+flooded its workdir finished with its output and declared artifact delivered —
+while the real /data was untouched, the deleted file still there, and
+/proc/mounts byte-identical. Exit codes propagate; a timeout kills the whole
+job tree; the supervised queue daemon turns /data/snake/queue files into
+results dirs.
 
 The mirror twin: where the lion makes things permanent, the snake makes work
 perfectly disposable.
@@ -272,8 +280,8 @@ and edit the YAML — with the panel itself installed like any other package.
 ## Sequencing
 
 ```
-M1 memory box ✅ →  M2 supervisor ✅ →  M3 seal ✅ →  M4 lion ✅ ─┐
-                                                       M5 snake ─┴→  M6 face (optional)
+M1 memory box ✅ →  M2 supervisor ✅ →  M3 seal ✅ →  M4 lion ✅ ──┐
+                                                     M5 snake ✅ ─┴→  M6 face (optional)
 ```
 
 M1–M3 are load-bearing and ordered: the seal's service hardening lands in the

@@ -1,0 +1,9 @@
+# The snake — disposable job runner (v2 milestone 5). Enable with "- snake"
+# under services: in the YAML. The daemon watches /data/snake/queue/ and runs
+# each job in an evaporating tmpfs mount-namespace sandbox; results land in
+# /data/snake/results/<job>-<stamp>/. One-off jobs need no daemon at all:
+#   zurvan-snake run <script>     (or `zurvan-snake run -` fed over SSH)
+# Runs as root: it must create mount namespaces (no user namespaces in this
+# kernel by design); the job itself gets no_new_privs and an all-tmpfs world.
+exec=/sbin/zurvan-snake daemon
+restart=yes

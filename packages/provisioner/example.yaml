@@ -38,3 +38,7 @@ services:
   - networking
   - ssh
   # - lion
+  # snake — job-queue daemon (v2 M5): runs files dropped in /data/snake/queue
+  # in evaporating sandboxes; results in /data/snake/results. One-off jobs
+  # work without it: zurvan-snake run <script>
+  # - snake
