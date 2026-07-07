@@ -99,8 +99,8 @@ and rolls back automatically if that boot fails.
 
 Zurvan is tiny, but it is a **BIOS**, **x86-64** system today.
 
-| | |
-|---|---|
+| Component | Requirement |
+|-----------|-------------|
 | **CPU** | x86-64 (64-bit). One core is enough. |
 | **Firmware** | **Legacy BIOS** — *not* UEFI. In VMware: VM Settings → Advanced → Firmware type → **BIOS**. (UEFI + Secure Boot is on the post-v2 list.) |
 | **RAM** | 256 MB minimum (the OS runs from RAM); **512 MB – 1 GB** recommended so the panel and per-service tmpfs have headroom. |
