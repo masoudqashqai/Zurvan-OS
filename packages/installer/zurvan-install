@@ -22,9 +22,11 @@ fail() { echo "[install] ERROR: $*" >&2; exit 1; }
 
 BOOT_MB=256           # p1 size; kernel+initrd+grub is ~25 MB, leave headroom
 CDDEV=""              # set by find_cd
-CDMNT=/mnt/zurvan-cd
-TGT=/mnt/zurvan-boot
-DATA=/mnt/zurvan-data
+# Mount points live under /run (tmpfs) so the installer works even when the
+# root is sealed read-only (v2 M3) — /mnt would be on the frozen root.
+CDMNT=/run/zi-cd
+TGT=/run/zi-boot
+DATA=/run/zi-data
 
 # --- arguments ----------------------------------------------------------------
 YES=0

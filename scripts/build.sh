@@ -111,9 +111,18 @@ chmod +x "$ROOTFS_OUT/sbin/zurvan-install"
 cp "$HERE/packages/pkgtool/zurvan-pkg" "$ROOTFS_OUT/sbin/zurvan-pkg"
 chmod +x "$ROOTFS_OUT/sbin/zurvan-pkg"
 
-# --- the seal: grubenv tool + signing public key (v2 milestone 3) --------------
-cp "$HERE/packages/upgrade/zurvan-grubenv" "$ROOTFS_OUT/sbin/zurvan-grubenv"
-chmod +x "$ROOTFS_OUT/sbin/zurvan-grubenv"
+# --- the seal: upgrade tooling + signing public key (v2 milestone 3) -----------
+for tool in zurvan-grubenv zurvan-upgrade; do
+	cp "$HERE/packages/upgrade/$tool" "$ROOTFS_OUT/sbin/$tool"
+	chmod +x "$ROOTFS_OUT/sbin/$tool"
+done
+# Static gpgv: zurvan-upgrade verifies bundles with the SAME signatures GRUB
+# checks at boot, so an unsigned image is rejected before touching a slot.
+if [ -x "$HERE/userland/build/gpgv" ]; then
+	cp "$HERE/userland/build/gpgv" "$ROOTFS_OUT/usr/bin/gpgv"
+else
+	echo "!! no static gpgv (userland/build-gpgv.sh) — upgrades can't be verified on-box" >&2
+fi
 # The PUBLIC key rides in the image so the box can verify upgrade bundles.
 if [ -f "$HERE/keys/zurvan-signing.pub" ]; then
 	cp "$HERE/keys/zurvan-signing.pub" "$ROOTFS_OUT/etc/zurvan-signing.pub"

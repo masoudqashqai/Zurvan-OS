@@ -34,15 +34,19 @@
  * stays up a minute. This process never exits (PID 1 would just respawn it).
  */
 
+#define _GNU_SOURCE            /* initgroups(), setgid/setuid feature macros */
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <grp.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -59,6 +63,7 @@
 struct svc {
 	char   name[NAME_LEN];
 	char   exec[LINE_LEN];              /* command line, split at spawn */
+	char   user[NAME_LEN];              /* run-as user (name); empty = root */
 	char   deps[MAX_DEPS][NAME_LEN];
 	int    ndeps;
 	int    restart;
@@ -74,7 +79,7 @@ static int nsvcs;
 
 /* --- tiny helpers ---------------------------------------------------------- */
 
-static void logf(const char *fmt, ...)
+static void svc_log(const char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
@@ -122,6 +127,8 @@ static int load_def(struct svc *s)
 		chomp(line);
 		if (strncmp(line, "exec=", 5) == 0) {
 			snprintf(s->exec, sizeof s->exec, "%s", line + 5);
+		} else if (strncmp(line, "user=", 5) == 0) {
+			snprintf(s->user, sizeof s->user, "%s", line + 5);
 		} else if (strncmp(line, "restart=", 8) == 0) {
 			s->restart = strcmp(line + 8, "yes") == 0;
 		} else if (strncmp(line, "after=", 6) == 0) {
@@ -140,7 +147,7 @@ static void load_enabled(void)
 {
 	FILE *f = fopen("/run/svc/enabled", "r");
 	if (!f) {
-		logf("nothing enabled (/run/svc/enabled missing) — idling.");
+		svc_log("nothing enabled (/run/svc/enabled missing) — idling.");
 		return;
 	}
 
@@ -154,7 +161,7 @@ static void load_enabled(void)
 		memset(s, 0, sizeof *s);
 		snprintf(s->name, sizeof s->name, "%s", line);
 		if (load_def(s) != 0) {
-			logf("WARNING: no definition for '%s' — skipping "
+			svc_log("WARNING: no definition for '%s' — skipping "
 			     "(want %s.def in /etc/svc or a package service: block)",
 			     s->name, s->name);
 			continue;
@@ -164,7 +171,7 @@ static void load_enabled(void)
 		nsvcs++;
 	}
 	fclose(f);
-	logf("%d service(s) enabled.", nsvcs);
+	svc_log("%d service(s) enabled.", nsvcs);
 }
 
 /* --- running ----------------------------------------------------------------- */
@@ -199,16 +206,39 @@ static void spawn(struct svc *s)
 
 	pid_t pid = fork();
 	if (pid < 0) {
-		logf("fork failed for %s; retrying in %ds", s->name, s->backoff);
+		svc_log("fork failed for %s; retrying in %ds", s->name, s->backoff);
 		s->due_at = time(NULL) + s->backoff;
 		return;
 	}
 	if (pid == 0) {
 		/* Own session: a dying service can't take siblings with it. */
 		setsid();
+
+		/* no_new_privs: this service (and anything it forks) can never gain
+		 * privileges through setuid/setgid binaries. Free hardening, set for
+		 * every service whether or not it also drops to a user. */
+		prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+
+		const char *home = "/root";
+		if (s->user[0]) {
+			struct passwd *pw = getpwnam(s->user);
+			if (!pw) {
+				/* Fail closed: a service asked to drop to a user that
+				 * doesn't exist must NOT silently run as root. */
+				_exit(126);
+			}
+			if (initgroups(s->user, pw->pw_gid) != 0 ||
+			    setgid(pw->pw_gid) != 0 ||
+			    setuid(pw->pw_uid) != 0)
+				_exit(126);
+			home = pw->pw_dir ? pw->pw_dir : "/";
+		}
+
+		char homeenv[LINE_LEN];
+		snprintf(homeenv, sizeof homeenv, "HOME=%s", home);
 		char *const envp[] = {
-			"PATH=/bin:/sbin:/usr/bin:/usr/sbin",
-			"HOME=/root",
+			(char *)"PATH=/bin:/sbin:/usr/bin:/usr/sbin",
+			homeenv,
 			NULL,
 		};
 		execve(argv[0], argv, envp);
@@ -218,7 +248,7 @@ static void spawn(struct svc *s)
 	s->pid = pid;
 	s->started_at = time(NULL);
 	s->due_at = 0;
-	logf("started %s (pid %d)", s->name, (int)pid);
+	svc_log("started %s (pid %d)", s->name, (int)pid);
 
 	char path[LINE_LEN];
 	snprintf(path, sizeof path, "/run/svc/%s.pid", s->name);
@@ -242,7 +272,7 @@ static void reap(void)
 
 			if (!s->restart) {
 				s->gave_up = 1;
-				logf("%s exited (status %d) after %lds — restart=no, leaving it.",
+				svc_log("%s exited (status %d) after %lds — restart=no, leaving it.",
 				     s->name, status, (long)up);
 				break;
 			}
@@ -251,7 +281,7 @@ static void reap(void)
 			if (up >= STABLE_SECS)
 				s->backoff = BACKOFF_MIN;
 			s->due_at = time(NULL) + s->backoff;
-			logf("%s died (status %d) after %lds — restarting in %ds",
+			svc_log("%s died (status %d) after %lds — restarting in %ds",
 			     s->name, status, (long)up, s->backoff);
 			if (s->backoff < BACKOFF_MAX) {
 				s->backoff *= 2;

@@ -46,6 +46,20 @@ need_data() {
 		|| fail "/data is not mounted — packages need the persistent disk (see zurvan-install)"
 }
 
+# The seal (v2 M3) leaves / read-only. Installing plants symlinks in /usr/bin,
+# /var/lib, ... — on the RAM root — so we briefly reopen / for writing and
+# reseal on the way out (including on error). root_was_ro remembers whether we
+# actually flipped it, so an already-writable root (zurvan.rw) is left alone.
+root_was_ro=0
+open_root() {
+	if grep -qE ' / [^ ]+ ro[, ]' /proc/mounts; then
+		mount -o remount,rw / 2>/dev/null && root_was_ro=1
+	fi
+}
+seal_root() {
+	[ "$root_was_ro" = 1 ] && mount -o remount,ro / 2>/dev/null || true
+}
+
 # --- manifest access -----------------------------------------------------------
 # yaml_scalar KEY FILE  -> value of a top-level "key: value"
 # yaml_list   KEY FILE  -> the "  - item" entries under a top-level "key:"
@@ -88,13 +102,18 @@ export_service() {
 	ex="$(svc_scalar exec "$man")"
 	[ -n "$ex" ] || return 0
 	mkdir -p /run/svc
+	usr="$(svc_scalar user "$man")"
 	{
 		echo "exec=$ex"
 		aft="$(svc_after "$man")"
 		[ -n "$aft" ] && echo "after=$aft"
+		[ -n "$usr" ] && echo "user=$usr"
 		r="$(svc_scalar restart "$man")"
 		echo "restart=${r:-yes}"
 	} > "/run/svc/$name.def"
+	# A service dropping to a non-root user must own its persistent state, or
+	# it can't write it. The state dir is on /data (writable); chown it here.
+	[ -n "$usr" ] && [ -d "$SRV/$name" ] && chown -R "$usr" "$SRV/$name" 2>/dev/null || true
 }
 
 # --- linking ---------------------------------------------------------------------
@@ -142,9 +161,14 @@ remove_links() {
 	remove_list "$1" state_links
 }
 
+# seal_root runs on the way out however we leave (success, fail, or signal),
+# so a package operation can never strand the root writable.
+trap seal_root EXIT INT TERM
+
 # --- commands ---------------------------------------------------------------------
 cmd_install() {
 	need_data
+	open_root
 	tarball="$1"
 	[ -f "$tarball" ] || fail "no such file: $tarball"
 
@@ -184,6 +208,7 @@ cmd_install() {
 
 cmd_remove() {
 	need_data
+	open_root
 	name="$1"
 	[ -d "$APPS/$name" ] || fail "$name is not installed"
 	remove_links "$name"
@@ -207,7 +232,10 @@ cmd_list() {
 cmd_dress() {
 	# Rebuild every link from every manifest — called by rc.init each boot,
 	# after /data mounts and before services start. Idempotent by nature.
+	# (At boot the root is still writable; open_root is only needed for a
+	# manual `zurvan-pkg dress` after the seal.)
 	mountpoint -q /data 2>/dev/null || return 0
+	open_root
 	for man in "$APPS"/*/manifest.yaml; do
 		[ -f "$man" ] || continue
 		name="$(yaml_scalar name "$man")"

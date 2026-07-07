@@ -142,6 +142,7 @@ for ifc in $(children network); do
 done
 
 # --- users --------------------------------------------------------------------
+any_password=0
 for i in $(indices users); do
 	name="$(get "users.$i.name")"
 	[ -n "$name" ] || continue
@@ -157,7 +158,10 @@ for i in $(indices users); do
 
 	# password: pre-hashed (crypt format), applied verbatim
 	pw="$(get "users.$i.password")"
-	[ -n "$pw" ] && printf '%s:%s\n' "$name" "$pw" | chpasswd -e 2>/dev/null
+	if [ -n "$pw" ]; then
+		printf '%s:%s\n' "$name" "$pw" | chpasswd -e 2>/dev/null
+		any_password=1
+	fi
 
 	# authorized_keys: rewrite the whole file from the config (idempotent)
 	home="$(awk -F: -v u="$name" '$1 == u { print $6 }' /etc/passwd)"
@@ -212,6 +216,18 @@ for i in $(indices services); do
 					ln -s /data/etc/dropbear /etc/dropbear
 				fi
 				mkdir -p /etc/dropbear
+				# Key-only by default (baked /etc/svc/ssh.def has -s). Only
+				# if the YAML gave a user a password do we override with a
+				# password-allowing def in /run/svc (which wins over /etc/svc).
+				if [ "$any_password" = 1 ]; then
+					mkdir -p /run/svc
+					printf 'exec=/bin/dropbear -F -R\nafter=networking\nrestart=yes\n' \
+						> /run/svc/ssh.def
+					log "service ssh: password auth ENABLED (a user has a password)"
+				else
+					rm -f /run/svc/ssh.def   # ensure key-only if re-provisioned
+					log "service ssh: key-only (no password set)"
+				fi
 				enable_svc ssh
 			else
 				log "service ssh: dropbear not in this image"

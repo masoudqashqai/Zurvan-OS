@@ -46,6 +46,30 @@ if [ -n "$DATA_DEV" ]; then
 	fi
 fi
 
+# --- writable churn on tmpfs (v2 milestone 3, prep for read-only root) --------
+# The root goes read-only at the end of this script. The handful of paths that
+# legitimately change at runtime get their own tmpfs first, so writes there
+# keep working while /usr, /bin, /etc freeze. Everything durable lives on /data.
+for d in /run /tmp /var/run /var/log; do
+	mkdir -p "$d"
+	mount -t tmpfs tmpfs "$d" 2>/dev/null || true
+done
+chmod 1777 /tmp
+# Login accounting (dropbear/who) — recreate on the fresh tmpfs.
+: > /var/run/utmp
+: > /var/log/wtmp
+# DNS is rewritten on DHCP renewal, so resolv.conf must stay writable: point
+# it at tmpfs before anything (provisioner, udhcpc) writes it.
+ln -sf /run/resolv.conf /etc/resolv.conf
+# Dropbear host keys need a writable home. With /data the provisioner points
+# /etc/dropbear there; without /data, aim it at tmpfs (fresh keys each boot,
+# same as pre-seal behaviour) so a read-only /etc doesn't block key gen.
+if [ -z "$DATA_DEV" ]; then
+	rm -rf /etc/dropbear
+	mkdir -p /run/dropbear
+	ln -sf /run/dropbear /etc/dropbear
+fi
+
 # --- set-dresser: recreate the standard-path symlinks for installed apps ------
 # The RAM root is reborn empty every boot; zurvan-pkg dress replants every
 # /usr/bin, /var/lib, ... symlink into /data from the package manifests.
@@ -53,6 +77,15 @@ fi
 if [ -n "$DATA_DEV" ] && command -v zurvan-pkg >/dev/null 2>&1; then
 	zurvan-pkg dress
 fi
+
+# --- runtime hardening sysctls (v2 milestone 3) -------------------------------
+# Complements the compiled-in kernel hardening; safe defaults for a server.
+sysctl -wq kernel.kptr_restrict=2           2>/dev/null || true  # hide kernel pointers
+sysctl -wq kernel.dmesg_restrict=1          2>/dev/null || true  # non-root can't read dmesg
+sysctl -wq kernel.unprivileged_bpf_disabled=1 2>/dev/null || true
+sysctl -wq net.core.bpf_jit_harden=2        2>/dev/null || true
+sysctl -wq kernel.yama.ptrace_scope=1       2>/dev/null || true  # no cross-process ptrace
+sysctl -wq net.ipv4.conf.all.rp_filter=1    2>/dev/null || true  # anti-spoof
 
 # --- loopback ---------------------------------------------------------------
 ip link set lo up 2>/dev/null || ifconfig lo up 2>/dev/null
@@ -105,6 +138,25 @@ if [ -n "$SLOT" ] && command -v zurvan-grubenv >/dev/null 2>&1; then
 			umount /run/zboot
 		fi
 	fi
+fi
+
+# --- seal the root read-only (v2 milestone 3) ---------------------------------
+# Everything that writes to / has now run (provisioning, dressing, the slot
+# commit). Freeze it: writes to /usr, /bin, /etc, /root now return EROFS, while
+# the tmpfs churn paths and /data stay writable. zurvan-pkg toggles this back
+# briefly when it installs. Opt out with zurvan.rw on the kernel cmdline.
+rw_forced=0
+for word in $(cat /proc/cmdline); do
+	[ "$word" = "zurvan.rw" ] && rw_forced=1
+done
+if [ "$rw_forced" = 0 ]; then
+	if mount -o remount,ro / 2>/dev/null; then
+		echo "[rc.init] root filesystem sealed read-only"
+	else
+		echo "[rc.init] WARNING: could not remount / read-only"
+	fi
+else
+	echo "[rc.init] zurvan.rw set — leaving root writable"
 fi
 
 echo "[rc.init] done."

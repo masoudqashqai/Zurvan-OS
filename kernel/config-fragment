@@ -67,3 +67,26 @@ CONFIG_OVERLAY_FS=y
 
 # --- 64-bit ELF binaries (busybox, bash, our init) --------------------------
 CONFIG_BINFMT_ELF=y
+
+# --- hardening baseline (v2 milestone 3, "the seal") -------------------------
+# Today's table stakes for a server kernel. Each is one symbol to review.
+# Memory-corruption mitigations:
+CONFIG_STACKPROTECTOR=y
+CONFIG_STACKPROTECTOR_STRONG=y
+CONFIG_HARDENED_USERCOPY=y
+CONFIG_FORTIFY_SOURCE=y
+CONFIG_SLAB_FREELIST_HARDENED=y
+CONFIG_SLAB_FREELIST_RANDOM=y
+CONFIG_RANDOMIZE_BASE=y            # KASLR
+CONFIG_RANDOMIZE_MEMORY=y
+# Shrink the attack surface / close info leaks:
+CONFIG_STRICT_KERNEL_RWX=y
+CONFIG_STRICT_MODULE_RWX=y
+CONFIG_DEVMEM=n                    # no /dev/mem window into RAM
+CONFIG_DEVKMEM=n
+CONFIG_SECURITY_DMESG_RESTRICT=y   # non-root can't read the kernel log
+CONFIG_LEGACY_PTYS=n
+# No loadable modules AT ALL — everything Zurvan needs is built in, so the
+# module-loading attack surface simply does not exist. (Belt for the seal:
+# a signed kernel that can't load an unsigned module at runtime.)
+CONFIG_MODULES=n

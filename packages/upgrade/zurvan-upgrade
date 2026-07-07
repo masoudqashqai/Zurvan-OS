@@ -1,0 +1,93 @@
+#!/bin/sh
+# zurvan-upgrade — install a new OS image into the inactive A/B slot (v2 M3).
+#
+# The whole point of the seal: upgrading is replacing one image, safely.
+#
+#   zurvan-upgrade <bundle.tar>
+#
+# A bundle is a plain tar of exactly: bzImage, bzImage.sig, initrd.img,
+# initrd.img.sig — signed with the same key the running system trusts
+# (/etc/zurvan-signing.pub). The steps, in the only safe order:
+#
+#   1. verify BOTH signatures with gpgv BEFORE anything touches the disk.
+#      An unsigned or wrong-key bundle never gets further than /tmp.
+#   2. write the images into the INACTIVE slot under temporary names, fsync,
+#      then rename into place. A power cut mid-write leaves the old inactive
+#      slot contents (or nothing) — never a half-written image the next boot
+#      would try.
+#   3. set ab_try=1 in grubenv (active stays put). Next boot GRUB tries the
+#      new slot ONCE; if it reaches userspace, rc.init commits it as active,
+#      and if it panics, GRUB falls back to the still-active good slot.
+#
+# The active slot is never touched, so rollback is automatic and free: a bad
+# upgrade costs one reboot, not a reinstall.
+set -eu
+
+log()  { echo "[upgrade] $*"; }
+fail() { echo "[upgrade] ERROR: $*" >&2; exit 1; }
+
+BUNDLE="${1:-}"
+[ -n "$BUNDLE" ] || fail "usage: zurvan-upgrade <bundle.tar>"
+[ -f "$BUNDLE" ] || fail "no such bundle: $BUNDLE"
+PUBKEY=/etc/zurvan-signing.pub
+[ -f "$PUBKEY" ] || fail "no trust anchor at $PUBKEY — this image can't verify upgrades"
+command -v gpgv >/dev/null 2>&1 || fail "gpgv missing from this image"
+
+# --- unpack to a scratch dir --------------------------------------------------
+TMP=/tmp/zupgrade.$$
+rm -rf "$TMP"; mkdir -p "$TMP"
+trap 'rm -rf "$TMP"' EXIT
+tar -xf "$BUNDLE" -C "$TMP" || fail "cannot unpack $BUNDLE"
+for f in bzImage bzImage.sig initrd.img initrd.img.sig; do
+	[ -f "$TMP/$f" ] || fail "bundle is missing $f"
+done
+
+# --- verify BEFORE touching the disk ------------------------------------------
+# gpgv is the whole verifier: it checks a detached sig against a keyring and
+# nothing else (no web of trust, no network) — exactly right here. A raw
+# exported public key doubles as a keyring, so $PUBKEY is passed directly.
+for img in bzImage initrd.img; do
+	gpgv --keyring "$PUBKEY" "$TMP/$img.sig" "$TMP/$img" 2>/dev/null \
+		|| fail "signature check FAILED for $img — refusing (unsigned or wrong key)"
+done
+log "signatures verified against $PUBKEY"
+
+# --- locate the boot partition + inactive slot --------------------------------
+BOOTDEV="$(findfs LABEL=ZURVAN-BOOT 2>/dev/null)" || BOOTDEV=""
+[ -n "$BOOTDEV" ] || fail "cannot find ZURVAN-BOOT partition"
+MNT=/run/zupgrade-boot
+mkdir -p "$MNT"
+mounted=0
+if ! mountpoint -q "$MNT" 2>/dev/null; then
+	mount -t ext4 "$BOOTDEV" "$MNT" || fail "cannot mount $BOOTDEV"
+	mounted=1
+fi
+release() { [ "$mounted" = 1 ] && umount "$MNT" 2>/dev/null || true; }
+trap 'release; rm -rf "$TMP"' EXIT
+
+ENV="$MNT/boot/grub/grubenv"
+[ -f "$ENV" ] || fail "no grubenv at $ENV (is this a sealed install?)"
+active="$(zurvan-grubenv "$ENV" get active)"; active="${active:-a}"
+if [ "$active" = "a" ]; then target=b; else target=a; fi
+SLOT="$MNT/boot/slot-$target"
+log "active slot is $active; writing new image to slot $target"
+mkdir -p "$SLOT"
+
+# --- write atomically: temp names, fsync, rename ------------------------------
+for img in bzImage bzImage.sig initrd.img initrd.img.sig; do
+	cp "$TMP/$img" "$SLOT/.new-$img"
+done
+sync
+for img in bzImage bzImage.sig initrd.img initrd.img.sig; do
+	mv "$SLOT/.new-$img" "$SLOT/$img"
+done
+sync
+
+# --- arm the trial boot -------------------------------------------------------
+# active stays = the current good slot; ab_try=1 tells GRUB to try $target
+# ONCE. rc.init commits it on a healthy boot; GRUB falls back otherwise.
+zurvan-grubenv "$ENV" set "ab_try=1" || fail "wrote slot $target but could not arm grubenv"
+release; trap 'rm -rf "$TMP"' EXIT
+
+log "slot $target armed for the next boot. Reboot to try it."
+log "If it boots cleanly it becomes active; if it fails, you keep slot $active."

@@ -116,7 +116,7 @@ if [ "$trial" = "b" ]; then set standby=a; else set standby=b; fi
 set default=0
 # Load failure (bad signature, missing file) falls through immediately:
 set fallback=1
-set timeout=3
+set timeout=10
 
 menuentry "Zurvan (slot $trial)" {
 	linux  /boot/slot-$trial/bzImage console=tty0 panic=10 zurvan.slot=$trial
@@ -152,6 +152,15 @@ if ls "$BUILD"/catalog/*.tar.gz >/dev/null 2>&1; then
 	cp "$BUILD"/catalog/*.tar.gz "$STAGE/catalog/"
 	echo ">> catalog packages on ISO: $(ls "$BUILD"/catalog/*.tar.gz | wc -l)"
 fi
+
+# --- upgrade bundle (v2 milestone 3) --------------------------------------------
+# A standalone, signed image users feed to `zurvan-upgrade` on a running box.
+# Same signed artifacts as the ISO's; just tarred on their own. Emitted next
+# to the ISO, not inside it.
+BUNDLE="${BUNDLE:-$BUILD/zurvan-upgrade.tar}"
+tar -cf "$BUNDLE" -C "$STAGE/boot" \
+	bzImage bzImage.sig initrd.img initrd.img.sig
+echo ">> upgrade bundle: $BUNDLE"
 
 # --- build --------------------------------------------------------------------
 echo ">> grub-mkrescue -> $ISO"

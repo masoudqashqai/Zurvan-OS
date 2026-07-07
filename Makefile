@@ -37,11 +37,12 @@ all: kernel userland init rootfs ## Build every layer (does not run)
 kernel: ## Fetch, configure and build the Linux kernel
 	@kernel/build.sh
 
-userland: ## Build static busybox, bash, dropbear, and e2fsprogs
+userland: ## Build static busybox, bash, dropbear, e2fsprogs, and gpgv
 	@userland/build-busybox.sh
 	@userland/build-bash.sh
 	@userland/build-dropbear.sh
 	@userland/build-e2fsprogs.sh
+	@userland/build-gpgv.sh
 
 init: ## Compile the C PID 1 and the zurvan-svc supervisor
 	@$(MAKE) -C init

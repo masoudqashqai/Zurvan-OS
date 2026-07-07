@@ -102,7 +102,14 @@ and killing either gets it restarted within seconds.
 
 ---
 
-## Milestone 3 — the seal: a boot chain you can trust
+## Milestone 3 — the seal: a boot chain you can trust ✅
+
+**Done (2026-07-07).** Verified end to end in QEMU: an unsigned/wrong-key bundle is
+rejected before touching a slot; a signed upgrade boots the new slot once and commits
+it; a corrupted trial slot falls back to the good slot automatically; the root is
+sealed read-only (`touch /usr/bin/x` → EROFS, `/data` still writes, package installs
+reseal behind themselves); services run with `no_new_privs`; SSH is key-only unless
+the YAML sets a password. UEFI Secure Boot is split out to the deferred list below.
 
 M1 made the machine *three artifacts*: image + YAML + `/data`. Right now every
 link in the boot chain — MBR → GRUB → kernel → image — **trusts** the previous
@@ -116,18 +123,25 @@ verified base — and the hardening switches land in the supervisor M2 just buil
 The architecture makes this unusually cheap: verifying one sealed image file is
 one signature check, not a million mutable files.
 
-**Verified boot (the seal itself)**
-- The build signs `bzImage`, `initrd.img`, and `grub.cfg` (GPG, detached
-  signatures). `core.img` embeds the public key and sets
-  `check_signatures=enforce` — GRUB refuses to load anything tampered.
+**Verified boot (the seal itself)** ✅ *delivered on the BIOS path*
+- The build signs `bzImage`, `initrd.img`, `grub.cfg`, and every GRUB module
+  (GPG, detached signatures; `scripts/make-keys.sh` + `scripts/sign.sh`).
+  `core.img` embeds the public key, which flips GRUB into
+  `check_signatures=enforce` — it refuses to load anything tampered.
 - Honest residual risk, documented: on BIOS/MBR, `core.img` itself is the
-  unverified root of trust. Fixing that needs firmware help:
-- **UEFI boot** for the ISO and installer (ESP partition + `x86_64-efi` GRUB) —
-  needed on modern hardware anyway — with **Secure Boot via user-enrolled keys**
-  (VMware custom key db / physical firmware enrollment). Then the firmware
-  verifies GRUB, GRUB verifies the image, and the chain is rooted in hardware.
+  unverified root of trust. Closing that needs firmware help (below), which is
+  the one part of this milestone deferred to its own follow-up.
+
+**UEFI + enroll-your-own-key Secure Boot** — *deferred to a follow-up*
+- **UEFI boot** for the ISO and installer (ESP partition + `x86_64-efi` GRUB),
+  with **Secure Boot via user-enrolled keys** (VMware custom key db / physical
+  firmware enrollment): the firmware verifies GRUB, GRUB verifies the image,
+  and the chain roots in hardware instead of an unverified `core.img`.
+- Deferred deliberately: it is a large, hard-to-test (manual firmware key
+  enrollment) sub-project, and the BIOS seal above already delivers the core
+  security property. Split out so M3 ships tested rather than half-done.
 - **Rabbit-hole warning:** no Microsoft-signed shim, no TPM sealing, no
-  attestation. Enroll-your-own-key is the whole v2 story; the MS-shim path is
+  attestation. Enroll-your-own-key is the whole story; the MS-shim path is
   a distribution problem, not an architecture problem.
 
 **A/B image slots + `zurvan-upgrade`** (promoted from the deferred list — an
@@ -252,8 +266,8 @@ and edit the YAML — with the panel itself installed like any other package.
 ## Sequencing
 
 ```
-M1 memory box ✅ →  M2 supervisor  →  M3 seal  →  M4 lion  ─┐
-                                                 M5 snake ─┴→  M6 face (optional)
+M1 memory box ✅ →  M2 supervisor ✅ →  M3 seal ✅ →  M4 lion  ─┐
+                                                     M5 snake ─┴→  M6 face (optional)
 ```
 
 M1–M3 are load-bearing and ordered: the seal's service hardening lands in the
@@ -268,6 +282,8 @@ M6 is a victory lap.
 - **Image / container duality** — one rootfs producing both a bootable image and
   an OCI container.
 - **Grandfather-father-son snapshot retention** for the lion.
+- **UEFI + enroll-your-own-key Secure Boot** — the hardware root of trust that
+  closes the BIOS `core.img` gap (split out of M3 so the BIOS seal ships tested).
 - **Microsoft-signed shim** — Secure Boot on machines where you can't enroll
   your own keys. A distribution/signing-ceremony problem, not a code problem.
 - **TPM-sealed keys** — unlock an encrypted `/data` without a console

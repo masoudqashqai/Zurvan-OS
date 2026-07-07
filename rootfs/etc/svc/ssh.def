@@ -2,6 +2,10 @@
 # -F: foreground (supervised services must not daemonize themselves).
 # -R: generate host keys on first demand; with a /data disk the provisioner
 #     has already pointed /etc/dropbear at persistent storage.
-exec=/bin/dropbear -F -R
+# -s: DISABLE password logins — key-only by default (v2 M3). The provisioner
+#     overrides this with /run/svc/ssh.def (no -s) only if the YAML gives a
+#     user a password, so passwords are strictly opt-in.
+# dropbear must run as root (it authenticates and spawns users' shells).
+exec=/bin/dropbear -F -R -s
 after=networking
 restart=yes
