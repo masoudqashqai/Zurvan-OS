@@ -197,3 +197,27 @@ User feedback from running the released ISO:
 - Test suite grew sections **G** (mkdir, editor-born file, back link) and
   **H** (disable kills ssh, survives a panel-driven reboot, enable restores it
   — asserted over HTTPS while ssh is the thing being disabled).
+
+### Follow-ups the same day (user testing the panel)
+- **Enable/disable didn't refresh the state** — clicking Disable showed
+  `stopping` and stuck there until a manual reload; enable showed the old
+  state too. The handler redirected the instant `zurvan-svc` returned, but the
+  supervisor only acts on its 1-second heartbeat, so the redirected page was a
+  correct snapshot of a state about to change. Added `svc_settle()`: after an
+  enable/disable the handler briefly polls `zurvan-svc state` until the service
+  reaches the settled word (or a ~2.5–3s cap for a crash-looper), so the page
+  the browser lands on is already right. Test H now follows the redirect
+  (`curl -L`) and asserts `disabled` appears with no reload.
+- **`zurvan-pkg install` exited 1 on non-service packages** (found while
+  packaging sqlite3/curl) — its last line was `[ -f …$name.def ] && log …`,
+  false for anything without a service block, and that false status became the
+  script's exit code, breaking `install && next` callers. Now an `if`.
+
+### Catalog grew (2026-07-09)
+Beyond nginx: **sqlite3** (amalgamation → one static shell binary; FTS5+RTree;
+extensions off — no loader) and **curl** (TLS via the panel's own BearSSL, CA
+bundle shipped inside the package; `curl_LDFLAGS=-all-static` because libtool
+drops a plain `-static`). Both verified on a fresh install: install exit 0,
+`sqlite3 select` returns, curl reports BearSSL and validates a real public
+cert. busybox already covers DHCP/DNS server duty (`udhcpd`, `dnsd`, `ntpd`,
+`httpd`), so dnsmasq was skipped as redundant.

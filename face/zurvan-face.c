@@ -937,6 +937,39 @@ static void redirect(struct buf *resp, const char *to, const char *setcookie)
 static int multipart_file(const struct req *r, char *fname, size_t fnsz,
                           const char **data, size_t *dlen);
 
+/* Read one service's state word ("up"/"down"/"disabled"/"stopping"). */
+static void svc_state_of(const char *name, char *buf, size_t bufsz)
+{
+	buf[0] = 0;
+	char st[8192];
+	char *v[] = { "zurvan-svc", "state", NULL };
+	run(v, st, sizeof st, NULL);
+	char *save = NULL;
+	for (char *line = strtok_r(st, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+		char n[64] = "", state[32] = ""; int pid;
+		if (sscanf(line, "%63s %d %31s", n, &pid, state) == 3 && strcmp(n, name) == 0) {
+			snprintf(buf, bufsz, "%s", state);
+			return;
+		}
+	}
+}
+
+/* enable/disable are asynchronous: the supervisor acts on its 1-second
+ * heartbeat, so redirecting the instant the CLI returns re-renders a
+ * transient "stopping"/"down" that the user then has to reload past. Briefly
+ * poll until the service reaches the settled state (or we give up — a service
+ * that crash-loops may never reach "up", which is fine, the page shows that). */
+static void svc_settle(const char *name, const char *want, int max_ms)
+{
+	char s[32];
+	for (int t = 0; ; t += 150) {
+		svc_state_of(name, s, sizeof s);
+		if (strcmp(s, want) == 0 || t >= max_ms)
+			return;
+		usleep(150000);
+	}
+}
+
 static void handle(const struct req *r, struct buf *resp)
 {
 	struct buf page = {0};
@@ -975,11 +1008,13 @@ static void handle(const struct req *r, struct buf *resp)
 		if (strcmp(r->path, "/services/disable") == 0 && form_get(body, "name", arg, sizeof arg)) {
 			char *v[] = { "zurvan-svc", "disable", arg, NULL };
 			run(v, out, sizeof out, NULL);
+			svc_settle(arg, "disabled", 2500);   /* SIGTERM lands fast */
 			redirect(resp, "/services", NULL); return;
 		}
 		if (strcmp(r->path, "/services/enable") == 0 && form_get(body, "name", arg, sizeof arg)) {
 			char *v[] = { "zurvan-svc", "enable", arg, NULL };
 			run(v, out, sizeof out, NULL);
+			svc_settle(arg, "up", 3000);          /* waits out the heartbeat + deps */
 			redirect(resp, "/services", NULL); return;
 		}
 		if (strcmp(r->path, "/snapshots/snap") == 0) {

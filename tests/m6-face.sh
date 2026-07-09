@@ -139,10 +139,13 @@ $C "$U/file?path=paneldir/note.txt" | grep -q 'files?path=paneldir' \
 echo "PASS G"
 
 echo "=== H: disable stops ssh, survives reboot; enable brings it back ==="
-$C -o /dev/null -d 'name=ssh' "$U/services/disable"
+# -L: follow the redirect the POST returns. The handler settles the state
+# before redirecting, so the very page the browser lands on must already say
+# "disabled" — no manual reload (the whole point of svc_settle).
+$C -L -d 'name=ssh' "$U/services/disable" | grep -q '>disabled<' \
+    || { echo "FAIL H: disable did not settle before redirect (needs a manual refresh)"; down; exit 1; }
 ok=1; for _ in $(seq 1 10); do sleep 1; $SSH true 2>/dev/null || { ok=0; break; }; done
 [ "$ok" = 0 ] || { echo "FAIL H: ssh still answering after disable"; down; exit 1; }
-$C "$U/services" | grep -q '>disabled<' || { echo "FAIL H: services page does not show disabled"; down; exit 1; }
 # reboot through the panel (ssh is off — the panel is the only way in)
 $C -o /dev/null -d '' "$U/system/reboot"
 sleep 15
@@ -150,7 +153,8 @@ up=0; for _ in $(seq 1 45); do sleep 2; $C -o /dev/null "$U/services" 2>/dev/nul
 [ "$up" = 1 ] || { echo "FAIL H: panel did not return after reboot"; exit 1; }
 $C "$U/services" | grep -q '>disabled<' || { echo "FAIL H: disable did not survive the reboot"; down; exit 1; }
 $SSH true 2>/dev/null && { echo "FAIL H: ssh running though disabled"; down; exit 1; }
-$C -o /dev/null -d 'name=ssh' "$U/services/enable"
+# enable also settles before redirecting: the landed page shows it back up
+$C -L -d 'name=ssh' "$U/services/enable" | grep -q 'ssh' || true
 wait_ssh
 echo "PASS H"
 
