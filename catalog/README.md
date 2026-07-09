@@ -7,6 +7,16 @@ loader ships in the image, so a package carries everything it needs inside
 itself. One file, zero shared-library dependencies, no version conflicts
 possible.
 
+## What's in it
+
+| Package | What it is | Notes |
+|---------|-----------|-------|
+| `sqlite3` | The embedded SQL database | One static shell binary; a database is one file — put it under `/data/srv`. FTS5 + R-Tree on; loadable extensions off (no loader to load them). |
+| `curl`   | TLS-capable HTTP/FTP client | TLS is **BearSSL**, the same stack the panel uses — no OpenSSL enters the image. Ships Mozilla's CA bundle at `/data/apps/curl/etc/`. |
+| `nginx`  | Web server | Static, no PCRE/zlib/OpenSSL; a service (`- nginx` in `services:`). Serves `/data/apps/nginx/html` on :80. |
+| `hello`  | The smallest possible package | Proves the pipeline: a link, a state link, a counter that survives reboot. |
+| `tick`   | A heartbeat daemon | Demo service for the supervisor — logs to `/data/srv/tick` on a timer. |
+
 ## Building
 
 Each `build-<name>.sh` here fetches/compiles its program (in the same style as

@@ -202,8 +202,12 @@ cmd_install() {
 	plant_links "$name"
 	export_service "$name"
 	log "installed $name${version:+ $version} -> $APPS/$name (state: $SRV/$name)"
-	[ -f "/run/svc/$name.def" ] \
-		&& log "service definition exported — add '$name' to services: in the YAML to enable it"
+	# `if`, not `A && B`: a non-service package has no .def, and a trailing
+	# false test would make cmd_install (and the whole script) exit 1 on a
+	# perfectly good install — which breaks `install && do-next` callers.
+	if [ -f "/run/svc/$name.def" ]; then
+		log "service definition exported — add '$name' to services: in the YAML to enable it"
+	fi
 }
 
 cmd_remove() {
