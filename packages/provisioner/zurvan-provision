@@ -271,8 +271,6 @@ for i in $(indices services); do
 					od -An -tx1 -N8 /dev/urandom | tr -d ' \n' > "$fdir/token"
 					chmod 600 "$fdir/token"
 				fi
-				tok="$(cat "$fdir/token" 2>/dev/null)"
-				ip4="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)"
 				# the panel reads its dir from --dir; /run/svc wins over /etc/svc
 				mkdir -p /run/svc
 				printf 'exec=/sbin/zurvan-face --dir %s\nafter=networking\nrestart=yes\n' \
@@ -282,17 +280,27 @@ for i in $(indices services); do
 				# program). Recreated each boot on the RAM root, before the seal.
 				cat > /usr/bin/zurvan-panel <<'PANEL'
 #!/bin/sh
+# Reprint the web-panel URL + admin token inside a highlighted box (coloured
+# when writing to a terminal) so it stands out from ordinary log lines.
 for d in /data/face /run/face; do [ -f "$d/token" ] && t="$(cat "$d/token")" && break; done
 ip="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)"
-echo "Web panel:   https://${ip:-<this-box>}:8443/"
-echo "Login token: ${t:-<none>}"
+url="https://${ip:-<this-box>}:8443/"; tok="${t:-<none>}"
+if [ -t 1 ]; then B='\033[1;36m'; K='\033[1;33m'; U='\033[36m'; Z='\033[0m'
+else B=''; K=''; U=''; Z=''; fi
+W=44
+bar() { printf "${B}+%s+${Z}\n" "$(printf '%*s' "$W" '' | tr ' ' '-')"; }
+row() { pad=$(( W - 2 - ${#1} )); [ "$pad" -lt 0 ] && pad=0; printf "${B}|${Z} %b%*s ${B}|${Z}\n" "$2" "$pad" ''; }
+bar
+row "Zurvan web panel" "${K}Zurvan web panel${Z}"
+row "URL:    $url"  "URL:    ${U}${url}${Z}"
+row "Token:  $tok"  "Token:  ${K}${tok}${Z}"
+bar
 PANEL
 				chmod +x /usr/bin/zurvan-panel
-				log "======================================================"
-				log " WEB PANEL:  https://${ip4:-<this-box>}:8443/"
-				log " LOGIN TOKEN: $tok   ($fmode)"
-				log " (run 'zurvan-panel' anytime to show this again)"
-				log "======================================================"
+				# Print the box now (the same command, one source of truth), then
+				# note where the identity lives. The box is coloured on the console.
+				/usr/bin/zurvan-panel
+				log "face: TLS identity + admin token ($fmode); reprint anytime with 'zurvan-panel'"
 				enable_svc face
 			else
 				log "service face: zurvan-face not in this image (skipped)"
