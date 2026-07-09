@@ -308,6 +308,13 @@ M6 is a victory lap.
 
 ## Still deferred beyond v2
 
+- **Signature-verified package installs.** The catalog pack is signed, but
+  `zurvan-pkg install` unpacks whatever it is handed, and the panel installs
+  whatever you upload. Ship a `.sig` beside each package and check it before
+  unpacking. Cheap: `gpgv` and the trust anchor (`/etc/zurvan-signing.pub`) are
+  already in every image — `zurvan-upgrade` gates images on exactly this.
+  **Rabbit-hole warning:** this is a signature check, not a package repository.
+  Still no `zurvan-pkg install <url>` — the install path stays offline.
 - **Image / container duality** — one rootfs producing both a bootable image and
   an OCI container.
 - **Grandfather-father-son snapshot retention** for the lion.

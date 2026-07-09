@@ -1,0 +1,17 @@
+# Packages that ship on the ISO. One name per line; `#` starts a comment.
+#
+# The ISO is a boot-and-install medium, not a software repository. A freshly
+# installed box must be useful with no network at all, so a small tier rides
+# along and `zurvan-install` copies it to /data. Everything else lives in the
+# catalog pack (`make catalog-pack`), downloaded separately.
+#
+# Keep this list SHORT. The whole point of the split is that catalog growth
+# stops growing the ISO — a new package goes in the pack unless it earns a line
+# here. It earns one only by being needed offline or by the test suite.
+#
+# Names are the package name, not the tarball: `nginx`, not `nginx-1.26.2.tar.gz`.
+
+nginx      # a real supervised service — the panel has something to show
+sqlite3    # a database is one file; the natural /data companion
+curl       # the only way to fetch anything on a box with no package fetcher
+tick       # heartbeat demo service; tests/m3-seal.sh installs it from /data

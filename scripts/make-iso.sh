@@ -156,12 +156,23 @@ cp "$GRUB_LIB"/*.mod "$GRUB_LIB"/*.lst "$STAGE/install/i386-pc/"
 "$SIGN" "$STAGE/install/i386-pc"/*
 
 # --- catalog packages (v2 milestone 2) ------------------------------------------
-# Ship whatever `make catalog` built; zurvan-install copies them onto /data so
-# a freshly installed box can `zurvan-pkg install /data/<pkg>.tar.gz` offline.
-if ls "$BUILD"/catalog/*.tar.gz >/dev/null 2>&1; then
+# Only the tier named in catalog/on-iso.txt rides along; zurvan-install copies
+# it onto /data so a freshly installed box can
+# `zurvan-pkg install /data/<pkg>.tar.gz` with no network. The rest of the
+# catalog ships as a separate download (scripts/make-catalog-pack.sh), which is
+# what keeps catalog growth from growing the ISO.
+ONISO="$HERE/catalog/on-iso.txt"
+if [ -f "$ONISO" ] && ls "$BUILD"/catalog/*.tar.gz >/dev/null 2>&1; then
 	mkdir -p "$STAGE/catalog"
-	cp "$BUILD"/catalog/*.tar.gz "$STAGE/catalog/"
-	echo ">> catalog packages on ISO: $(ls "$BUILD"/catalog/*.tar.gz | wc -l)"
+	n=0
+	for name in $(sed 's/#.*//' "$ONISO"); do
+		# <name>-<version>.tar.gz — the version is the build script's business.
+		pkg=$(ls "$BUILD/catalog/$name"-*.tar.gz 2>/dev/null | head -1)
+		[ -n "$pkg" ] || { echo "!! on-iso.txt names '$name' but it is not built" >&2; exit 1; }
+		cp "$pkg" "$STAGE/catalog/"
+		n=$((n + 1))
+	done
+	echo ">> catalog packages on ISO: $n ($(du -sh "$STAGE/catalog" | cut -f1))"
 fi
 
 # --- upgrade bundle (v2 milestone 3) --------------------------------------------
