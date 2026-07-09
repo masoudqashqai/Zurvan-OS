@@ -12,6 +12,9 @@
 #   D: edit /data/zurvan.yaml through the panel and read it back changed
 #   E: run a job from the panel -> it went through the snake (sandboxed)
 #   F: token + cert persist across a reboot (same fingerprint, same token)
+#   G: files — New folder creates a dir; a new file is born in the editor;
+#      the editor links back to its directory
+#   H: disable stops a service and survives a reboot; enable brings it back
 #
 # Run as root (losetup/mount); needs qemu-system-x86_64, curl, a built kernel,
 # rootfs, and ISO (make all && scripts/make-iso.sh). Forwards guest :8443 and
@@ -124,6 +127,32 @@ FP2="$(echo | openssl s_client -connect 127.0.0.1:8443 2>/dev/null | openssl x50
 [ "$TOK2" = "$TOKb" ] || { echo "FAIL F: token changed across reboot"; down; exit 1; }
 [ -n "$FP1" ] && [ "$FP1" = "$FP2" ] || { echo "FAIL F: cert changed across reboot ($FP1 / $FP2)"; down; exit 1; }
 echo "PASS F"
+
+echo "=== G: files — new folder, new file via the editor, back link ==="
+$C -o /dev/null -d 'path=&name=paneldir' "$U/files/mkdir"
+$SSH '[ -d /data/paneldir ]' || { echo "FAIL G: New folder did not mkdir"; down; exit 1; }
+# a "new file" is the editor pointed at a path that doesn't exist yet; Save creates it
+$C --data-urlencode 'path=paneldir/note.txt' --data-urlencode 'content=made-in-editor' "$U/file" >/dev/null
+$SSH 'grep -q made-in-editor /data/paneldir/note.txt' || { echo "FAIL G: editor Save did not create the file"; down; exit 1; }
+$C "$U/file?path=paneldir/note.txt" | grep -q 'files?path=paneldir' \
+    || { echo "FAIL G: editor has no back link to its directory"; down; exit 1; }
+echo "PASS G"
+
+echo "=== H: disable stops ssh, survives reboot; enable brings it back ==="
+$C -o /dev/null -d 'name=ssh' "$U/services/disable"
+ok=1; for _ in $(seq 1 10); do sleep 1; $SSH true 2>/dev/null || { ok=0; break; }; done
+[ "$ok" = 0 ] || { echo "FAIL H: ssh still answering after disable"; down; exit 1; }
+$C "$U/services" | grep -q '>disabled<' || { echo "FAIL H: services page does not show disabled"; down; exit 1; }
+# reboot through the panel (ssh is off — the panel is the only way in)
+$C -o /dev/null -d '' "$U/system/reboot"
+sleep 15
+up=0; for _ in $(seq 1 45); do sleep 2; $C -o /dev/null "$U/services" 2>/dev/null && { up=1; break; }; done
+[ "$up" = 1 ] || { echo "FAIL H: panel did not return after reboot"; exit 1; }
+$C "$U/services" | grep -q '>disabled<' || { echo "FAIL H: disable did not survive the reboot"; down; exit 1; }
+$SSH true 2>/dev/null && { echo "FAIL H: ssh running though disabled"; down; exit 1; }
+$C -o /dev/null -d 'name=ssh' "$U/services/enable"
+wait_ssh
+echo "PASS H"
 
 down
 echo "MILESTONE 6 DONE-WHEN: PASS"

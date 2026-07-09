@@ -171,3 +171,29 @@ token). No multipart upload (bundles/packages come from /data). No live
 websockets/auto-refresh (a reload is fine for a panel). No HTTP/2, no
 keep-alive, no concurrency. TLS 1.2 only (BearSSL 0.6). The cert is
 self-signed — a real CA/ACME story is out of scope for a headless box.
+
+## Post-v2.0.0 polish (2026-07-09)
+
+User feedback from running the released ISO:
+
+- **Services enable/disable** (panel + CLI). `zurvan-svc disable NAME` drops a
+  marker file the heartbeat honors: the service is SIGTERMed, not rescheduled,
+  and refused a start while the marker exists; `enable` unlinks it and the
+  1-second loop starts the service right back. Markers live in
+  `/data/svc/disabled/` so a disable **survives reboot** (the YAML still says
+  what the box *wants*; the marker is the admin's persistent off-switch); a
+  diskless boot falls back to `/run/svc/disabled` because the sealed read-only
+  root makes the /data mkdir fail with EROFS — the fallback is automatic, not
+  configured. `state` now reports `stopping`/`disabled`, and the panel renders
+  an Enable button for those rows — with a special confirm when disabling
+  `face` itself, which stops the panel you are clicking in.
+- **Files: New folder / New file.** mkdir is a tiny new POST; a *new file* is
+  deliberately not — it is the existing editor pointed at a path that does not
+  exist yet (`O_CREAT` on save was already there). One feature for free.
+- **Editor back link.** Saving re-renders the editor (it never navigated), so
+  the only way out was the top tabs. The editor now links back to the
+  directory the file lives in — and the old `cancel` link, which always went
+  to the /data root, goes there too.
+- Test suite grew sections **G** (mkdir, editor-born file, back link) and
+  **H** (disable kills ssh, survives a panel-driven reboot, enable restores it
+  — asserted over HTTPS while ssh is the thing being disabled).

@@ -349,9 +349,31 @@ static void services_table(struct buf *out, int full)
 			if (full) {
 				if (pid > 0) bprintf(out, "<td class=dim>%d</td>", pid);
 				else         bputs(out, "<td class=dim>&mdash;</td>");
-				bprintf(out, "<td><form class=inline method=post action=/services/restart>"
-				             "<input type=hidden name=name value=\"%s\">"
-				             "<button class=g>Restart</button></form></td>", name);
+				bputs(out, "<td class=row>");
+				if (strcmp(state, "disabled") == 0 || strcmp(state, "stopping") == 0) {
+					bprintf(out, "<form class=inline method=post action=/services/enable>"
+					             "<input type=hidden name=name value=\"%s\">"
+					             "<button>Enable</button></form>", name);
+				} else {
+					bprintf(out, "<form class=inline method=post action=/services/restart>"
+					             "<input type=hidden name=name value=\"%s\">"
+					             "<button class=g>Restart</button></form>", name);
+					/* Disabling face kills THIS panel — say so before doing it. */
+					if (strcmp(name, "face") == 0)
+						bputs(out, "<form class=inline method=post action=/services/disable "
+						           "onsubmit=\"return confirm('Disable face? This panel STOPS "
+						           "immediately and only comes back via SSH or the console: "
+						           "zurvan-svc enable face')\">"
+						           "<input type=hidden name=name value=\"face\">"
+						           "<button class=g>Disable</button></form>");
+					else
+						bprintf(out, "<form class=inline method=post action=/services/disable "
+						             "onsubmit=\"return confirm('Disable %s? It stops now and "
+						             "stays off, across reboots, until re-enabled.')\">"
+						             "<input type=hidden name=name value=\"%s\">"
+						             "<button class=g>Disable</button></form>", name, name);
+				}
+				bputs(out, "</td>");
 			}
 			bputs(out, "</tr>");
 		}
@@ -498,7 +520,9 @@ static void view_services(struct buf *out, const char *flash)
 	bputs(out, "<p class=dim><b>Listening</b> is the TCP port(s) the service accepts "
 	           "connections on; <b>Uptime</b> is how long it has been running (a value that "
 	           "keeps resetting means it is crash-looping); <b>PID</b> is its process id. "
-	           "Restart signals the supervisor to respawn the service.</p>");
+	           "<b>Restart</b> signals the supervisor to respawn the service. <b>Disable</b> "
+	           "stops it and keeps it off — across reboots — until <b>Enable</b> removes "
+	           "the off-switch (a marker on /data, so it outlives the ephemeral OS).</p>");
 	page_foot(out);
 }
 
@@ -641,9 +665,14 @@ static void view_files(struct buf *out, const char *rel)
 	DIR *d = opendir(abs);
 	if (!d) { bputs(out, "<p class=bad>cannot open directory</p>"); page_foot(out); return; }
 
+	/* The New buttons live inside the upload form's row (for the layout) but
+	 * are type=button so they never submit it. */
 	bprintf(out, "<div class=card><form method=post action=\"/files/upload?path=%s\" "
 	             "enctype=multipart/form-data><div class=row>"
-	             "<input type=file name=file><button>Upload here</button></div></form></div>", rel);
+	             "<input type=file name=file><button>Upload here</button>"
+	             "<button type=button class=g onclick=\"nd('%s')\">New folder</button>"
+	             "<button type=button class=g onclick=\"nf('%s')\">New file</button>"
+	             "</div></form></div>", rel, rel, rel);
 
 	bputs(out, "<div class=card><table><tr><th>Name</th><th>Size</th><th></th></tr>");
 	if (rel[0]) {
@@ -690,6 +719,11 @@ static void view_files(struct buf *out, const char *rel)
 	    "function base(p){return p.split('/').pop();}"
 	    "function ren(p){var n=prompt('Rename to:',base(p));if(n)post('/files/rename',{path:p,name:n});}"
 	    "function cp(p){var n=prompt('Copy to (new name):',base(p));if(n)post('/files/copy',{path:p,name:n});}"
+	    "function nd(d){var n=prompt('New folder name:');if(n)post('/files/mkdir',{path:d,name:n});}"
+	    /* a new file is just the editor pointed at a path that doesn't exist
+	     * yet — Save creates it */
+	    "function nf(d){var n=prompt('New file name:');"
+	    "if(n)location.href='/file?path='+(d?d+'/':'')+encodeURIComponent(n);}"
 	    "</script>");
 	page_foot(out);
 }
@@ -700,6 +734,13 @@ static void view_file(struct buf *out, const char *rel, const char *flash)
 	char abs[1024];
 	if (!data_path_ok(rel, abs, sizeof abs)) { bputs(out, "<p class=bad>bad path</p>"); page_foot(out); return; }
 	bprintf(out, "<h1>Edit <span class=dim>/data/%s</span></h1>", rel);
+
+	/* back to the directory this file lives in (also the post-Save way out —
+	 * saving re-renders this page, it doesn't navigate) */
+	char up[1024]; snprintf(up, sizeof up, "%s", rel);
+	char *s = strrchr(up, '/'); if (s) *s = 0; else up[0] = 0;
+	bprintf(out, "<p><a href=\"/files?path=%s\">&larr; back to /data/%s</a></p>", up, up);
+
 	if (flash && flash[0]) { bputs(out, "<div class=card>"); besc(out, flash); bputs(out, "</div>"); }
 
 	char data[OUT_MAX]; data[0] = 0;
@@ -709,8 +750,8 @@ static void view_file(struct buf *out, const char *rel, const char *flash)
 	bputs(out, "<form method=post action=/file><div class=card>");
 	bprintf(out, "<input type=hidden name=path value=\"%s\"><textarea name=content>", rel);
 	besc(out, data);
-	bputs(out, "</textarea></div><button>Save</button> "
-	           "<a href=\"/files?path=\" class=dim>cancel</a></form>");
+	bputs(out, "</textarea></div><button>Save</button> ");
+	bprintf(out, "<a href=\"/files?path=%s\" class=dim>back without saving</a></form>", up);
 	page_foot(out);
 }
 
@@ -931,6 +972,16 @@ static void handle(const struct req *r, struct buf *resp)
 			run(v, out, sizeof out, NULL);
 			redirect(resp, "/services", NULL); return;
 		}
+		if (strcmp(r->path, "/services/disable") == 0 && form_get(body, "name", arg, sizeof arg)) {
+			char *v[] = { "zurvan-svc", "disable", arg, NULL };
+			run(v, out, sizeof out, NULL);
+			redirect(resp, "/services", NULL); return;
+		}
+		if (strcmp(r->path, "/services/enable") == 0 && form_get(body, "name", arg, sizeof arg)) {
+			char *v[] = { "zurvan-svc", "enable", arg, NULL };
+			run(v, out, sizeof out, NULL);
+			redirect(resp, "/services", NULL); return;
+		}
 		if (strcmp(r->path, "/snapshots/snap") == 0) {
 			char *v[] = { "zurvan-lion", "snap", NULL }; run(v, out, sizeof out, NULL);
 			redirect(resp, "/snapshots", NULL); return;
@@ -1014,7 +1065,17 @@ static void handle(const struct req *r, struct buf *resp)
 			respond(resp, "200 OK", "text/html", NULL, page.p, page.n);
 			free(page.p); return;
 		}
-		/* --- file management on /data: delete / rename / copy --- */
+		/* --- file management on /data: mkdir / delete / rename / copy --- */
+		if (strcmp(r->path, "/files/mkdir") == 0 && form_get(body, "name", arg, sizeof arg)) {
+			char dir[1024] = ""; form_get(body, "path", dir, sizeof dir);
+			if (name_safe(arg) && !strstr(dir, "..")) {
+				char abs[1400];
+				snprintf(abs, sizeof abs, "/data/%s%s%s", dir, dir[0] ? "/" : "", arg);
+				mkdir(abs, 0755);
+			}
+			char to[1300]; snprintf(to, sizeof to, "/files?path=%s", dir);
+			redirect(resp, to, NULL); return;
+		}
 		if (strcmp(r->path, "/files/delete") == 0 && form_get(body, "path", arg, sizeof arg)) {
 			char abs[1400];
 			if (arg[0] && !strstr(arg, "..")) {

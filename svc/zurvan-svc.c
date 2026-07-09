@@ -18,6 +18,11 @@
  *   /etc/svc/NAME.def     definitions baked into the image (e.g. ssh)
  *   /run/svc/NAME.def     definitions exported from package manifests by
  *                         zurvan-pkg (these win over /etc/svc)
+ *   /data/svc/disabled/NAME   admin off-switch (`zurvan-svc disable NAME`):
+ *                         the service is stopped and stays stopped, across
+ *                         reboots, until the marker is removed. On a diskless
+ *                         boot the marker falls back to /run/svc/disabled —
+ *                         which is all "persistent" can mean with no disk.
  *
  * A .def is flat key=value:
  *
@@ -35,6 +40,7 @@
  */
 
 #define _GNU_SOURCE            /* initgroups(), setgid/setuid feature macros */
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -103,6 +109,22 @@ static struct svc *find(const char *name)
 		if (strcmp(svcs[i].name, name) == 0)
 			return &svcs[i];
 	return NULL;
+}
+
+/* --- disable markers ---------------------------------------------------------
+ * `zurvan-svc disable NAME` drops a marker file; every heartbeat the
+ * supervisor stops a marked service and refuses to (re)start it until the
+ * marker goes away (`zurvan-svc enable NAME`). Markers live on /data so a
+ * disable survives reboot; a diskless boot falls back to /run/svc/disabled. */
+static int is_disabled(const char *name)
+{
+	char p[LINE_LEN];
+	struct stat st;
+	snprintf(p, sizeof p, "/data/svc/disabled/%s", name);
+	if (stat(p, &st) == 0)
+		return 1;
+	snprintf(p, sizeof p, "/run/svc/disabled/%s", name);
+	return stat(p, &st) == 0;
 }
 
 /* --- loading ---------------------------------------------------------------- */
@@ -270,6 +292,15 @@ static void reap(void)
 			time_t up = time(NULL) - s->started_at;
 			s->pid = 0;
 
+			if (is_disabled(s->name)) {
+				/* Deliberate stop, not a crash: no backoff, and leave it
+				 * due so removing the marker starts it within a second. */
+				s->backoff = BACKOFF_MIN;
+				s->due_at  = time(NULL);
+				svc_log("%s stopped (disabled) after %lds", s->name, (long)up);
+				break;
+			}
+
 			if (!s->restart) {
 				s->gave_up = 1;
 				svc_log("%s exited (status %d) after %lds — restart=no, leaving it.",
@@ -302,9 +333,23 @@ static void start_due(void)
 		struct svc *s = &svcs[i];
 		if (s->pid || s->gave_up || !s->due_at || s->due_at > now)
 			continue;
+		if (is_disabled(s->name))
+			continue;       /* stays due; starts the tick after re-enable */
 		if (!deps_ready(s))
 			continue;       /* stays due; picked up on a later tick */
 		spawn(s);
+	}
+}
+
+/* SIGTERM anything running with a disable marker. Re-signalled every tick
+ * until it exits (idempotent); reap() sees the marker and does not
+ * reschedule it. */
+static void stop_disabled(void)
+{
+	for (int i = 0; i < nsvcs; i++) {
+		struct svc *s = &svcs[i];
+		if (s->pid && is_disabled(s->name))
+			kill(s->pid, SIGTERM);
 	}
 }
 
@@ -338,7 +383,10 @@ static int cmd_state(void)
 		if (!line[0] || line[0] == '#')
 			continue;
 		int pid = pid_alive(line);
-		printf("%s %d %s\n", line, pid, pid ? "up" : "down");
+		if (is_disabled(line))
+			printf("%s %d %s\n", line, pid, pid ? "stopping" : "disabled");
+		else
+			printf("%s %d %s\n", line, pid, pid ? "up" : "down");
 	}
 	fclose(f);
 	return 0;
@@ -357,14 +405,73 @@ static int cmd_restart(const char *name)
 	return 0;
 }
 
+/* Where a new disable marker goes: /data when it can hold one (the installed
+ * boot — mkdir on the sealed RAM root fails with EROFS), else /run. */
+static const char *disable_dir(void)
+{
+	if ((mkdir("/data/svc", 0755) == 0 || errno == EEXIST) &&
+	    (mkdir("/data/svc/disabled", 0755) == 0 || errno == EEXIST))
+		return "/data/svc/disabled";
+	mkdir("/run/svc/disabled", 0755);
+	return "/run/svc/disabled";
+}
+
+static int cmd_disable(const char *name)
+{
+	char p[LINE_LEN];
+	snprintf(p, sizeof p, "%s/%s", disable_dir(), name);
+	int fd = open(p, O_WRONLY | O_CREAT, 0644);
+	if (fd < 0) {
+		fprintf(stderr, "cannot write %s\n", p);
+		return 1;
+	}
+	close(fd);
+	int pid = pid_alive(name);
+	if (pid > 0)
+		kill(pid, SIGTERM);
+	printf("%s disabled%s — it stays off until: zurvan-svc enable %s\n",
+	       name, pid > 0 ? " (stopping)" : "", name);
+	return 0;
+}
+
+static int cmd_enable(const char *name)
+{
+	char p[LINE_LEN];
+	int had = 0;
+	snprintf(p, sizeof p, "/data/svc/disabled/%s", name);
+	if (unlink(p) == 0) had = 1;
+	snprintf(p, sizeof p, "/run/svc/disabled/%s", name);
+	if (unlink(p) == 0) had = 1;
+	if (had)
+		printf("%s enabled — the supervisor starts it within a second\n", name);
+	else
+		printf("%s was not disabled\n", name);
+	return 0;
+}
+
+/* Subcommand names come from the panel too — never let one become a path. */
+static int name_ok(const char *n)
+{
+	return n[0] && !strchr(n, '/') && !strstr(n, "..");
+}
+
 /* --- main ---------------------------------------------------------------------- */
 
 int main(int argc, char **argv)
 {
 	if (argc > 1 && strcmp(argv[1], "state") == 0)
 		return cmd_state();
-	if (argc > 1 && strcmp(argv[1], "restart") == 0 && argc > 2)
-		return cmd_restart(argv[2]);
+	if (argc > 2 && (strcmp(argv[1], "restart") == 0 ||
+	                 strcmp(argv[1], "enable")  == 0 ||
+	                 strcmp(argv[1], "disable") == 0)) {
+		if (!name_ok(argv[2])) {
+			fprintf(stderr, "bad service name\n");
+			return 1;
+		}
+		if (argv[1][0] == 'r') return cmd_restart(argv[2]);
+		if (argv[1][0] == 'e') return cmd_enable(argv[2]);
+		return cmd_disable(argv[2]);
+	}
 
 	/* PID 1 respawns us if we die; don't die for trivia. */
 	signal(SIGINT,  SIG_IGN);
@@ -378,6 +485,7 @@ int main(int argc, char **argv)
 	 * exiting would just make PID 1 spin respawning us. */
 	for (;;) {
 		reap();
+		stop_disabled();
 		start_due();
 		sleep(1);
 	}
