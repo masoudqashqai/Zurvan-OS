@@ -1,17 +1,24 @@
-# Example Zurvan first-boot config — the shape the provisioner targets.
+# Zurvan first-boot configuration.
 #
-# Pass it in via the kernel cmdline:
-#   APPEND_EXTRA="zurvan.config=/etc/zurvan.yaml" scripts/run-qemu.sh
+# The whole machine is described by three things: the signed image, the contents
+# of /data, and this one file. The provisioner reads it on every boot and brings
+# the box to exactly this state — idempotently, so re-running never drifts. The
+# keys are a fixed, bounded set (hostname / network / users / services / lion);
+# anything else is out of scope by design (see ROADMAP.md).
 #
-# Keys are a FIXED, bounded set (hostname / network / users / services).
-# Anything not listed here is out of scope by design — see ROADMAP.md.
+# On install this file is copied to /data/zurvan.yaml. Edit that copy — in the
+# web panel's file editor, or over SSH — and reboot to reconfigure.
+#
+# GETTING IN THE FIRST TIME: the web panel comes up on HTTPS (below) and prints
+# a one-time admin token to the console — that is your way in before any SSH key
+# is set. Run `zurvan-panel` on the console to reprint the URL and token.
 
-hostname: zurvan-box
+hostname: zurvan
 
 network:
   eth0:
-    # DHCP works under QEMU user-net AND VMware NAT alike. For a static
-    # address, set dhcp: false and uncomment (these are QEMU's subnet):
+    # DHCP works under VMware NAT and QEMU user-net alike. For a fixed address,
+    # set dhcp: false and fill in the block (values below are QEMU's subnet):
     dhcp: true
     # address: 10.0.2.50/24
     # gateway: 10.0.2.2
@@ -20,29 +27,37 @@ network:
 
 users:
   - name: zurvan
-    # shell defaults to /bin/bash if omitted
-    shell: /bin/bash
-    # one of password (hashed) / authorized_keys is enough
-    authorized_keys:
-      - "ssh-ed25519 AAAA... example-key"
+    shell: /bin/bash              # defaults to /bin/bash if omitted
+    # SSH is KEY-ONLY by default — the strong default; keep it. Paste your
+    # public key below to allow remote login for this user. Until you do, the
+    # box ships with NO SSH credentials and is administered from the console and
+    # the web panel (token above) — nothing to guess, nothing to brute-force.
+    # authorized_keys:
+    #   - "ssh-ed25519 AAAA...your-public-key... you@laptop"
+    #
+    # A password is deliberately omitted: setting one re-enables password auth
+    # for the whole SSH server. If you truly need it, supply a HASHED value
+    # (e.g. `mkpasswd -m sha512crypt`), never a plaintext one:
+    # password: "$6$...replace-with-a-real-hash..."
 
-# lion — the /data snapshot daemon (v2 M4). Snapshots land in /data/lion/ as
-# checksummed tar.gz ring buffer; restore with: zurvan-lion restore <name>.
-# every accepts s/m/h/d suffixes. Defaults shown; enable with "- lion" below.
-# lion:
-#   every: 24h
-#   keep: 7
+# lion — the guardian of /data (v2 M4). Takes a checksummed, compressed snapshot
+# of /data on a schedule and keeps the last N as a ring buffer; restore with
+# `zurvan-lion restore <name>`. ON by default, so the box protects its data from
+# the very first boot. To opt out, comment this block and the "- lion" line.
+lion:
+  every: 24h                      # accepts s / m / h / d suffixes
+  keep: 7
 
 services:
-  # names the provisioner knows how to start; bounded set, not arbitrary units
+  # A bounded set the provisioner knows how to start — not arbitrary units.
   - networking
   - ssh
-  # face — the web admin panel (v2 M6), ON by default. HTTPS on :8443 with a
-  # per-box cert; the admin token is printed to the console at first boot.
-  # Remove this line to run headless-only over SSH.
+  # face — the web admin panel (v2 M6): HTTPS on :8443 with a per-box cert, the
+  # admin token printed to the console at first boot. Remove to run headless.
   - face
-  # - lion
-  # snake — job-queue daemon (v2 M5): runs files dropped in /data/snake/queue
-  # in evaporating sandboxes; results in /data/snake/results. One-off jobs
-  # work without it: zurvan-snake run <script>
-  # - snake
+  # lion — the daily /data snapshots configured above. The safety net.
+  - lion
+  # snake — the job runner (v2 M5): files dropped in /data/snake/queue run in
+  # disposable sandboxes and results land in /data/snake/results. One-off jobs
+  # also work without it: `zurvan-snake run <script>`.
+  - snake
