@@ -858,6 +858,14 @@ static void view_packages(struct buf *out, const char *flash)
 				char defp[256]; snprintf(defp, sizeof defp, "/run/svc/%s.def", name);
 				int is_svc = path_exists(defp);
 				int is_en  = line_in_file("/run/svc/enabled", name);
+				/* A runtime disable (Services page) leaves the name in
+				 * /run/svc/enabled and drops a marker instead — so "enabled"
+				 * alone would wrongly persist after a disable. Reflect the
+				 * marker. */
+				char disp[256], disr[256];
+				snprintf(disp, sizeof disp, "/data/svc/disabled/%s", name);
+				snprintf(disr, sizeof disr, "/run/svc/disabled/%s", name);
+				int is_dis = path_exists(disp) || path_exists(disr);
 				bprintf(out, "<tr><td class=mono>%s</td><td class=dim>%s</td><td class=row>",
 				        name, ver);
 				if (is_svc && !is_en)
@@ -866,6 +874,8 @@ static void view_packages(struct buf *out, const char *flash)
 					             "services: in zurvan.yaml and started now.')\">"
 					             "<input type=hidden name=name value=\"%s\">"
 					             "<button>Enable</button></form>", name, name);
+				else if (is_svc && is_dis)
+					bputs(out, "<a href=/services class=pill>disabled</a>");
 				else if (is_svc)
 					bputs(out, "<a href=/services class=pill>enabled</a>");
 				bprintf(out, "<form class=inline method=post action=/packages/remove "

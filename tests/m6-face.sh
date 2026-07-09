@@ -156,6 +156,12 @@ $SSH 'grep -qE "^[[:space:]]*-[[:space:]]+nginx[[:space:]]*$" /data/zurvan.yaml'
     || { echo "FAIL J: nginx not added to services: in zurvan.yaml"; down; exit 1; }
 up=0; for _ in $(seq 1 15); do sleep 1; $SSH 'zurvan-svc state | grep -qE "^nginx [0-9]+ up"' && { up=1; break; }; done
 [ "$up" = 1 ] || { echo "FAIL J: nginx did not come up under the supervisor"; down; exit 1; }
+$C "$U/packages" | grep -q 'class=pill>enabled<' || { echo "FAIL J: Installed table not showing enabled"; down; exit 1; }
+# a runtime disable must flip the Packages label too (it used to stay "enabled")
+$C -L -d 'name=nginx' "$U/services/disable" >/dev/null
+$C "$U/packages" | grep -q 'class=pill>disabled<' || { echo "FAIL J: disabled service still labelled enabled on Packages"; down; exit 1; }
+$C -L -d 'name=nginx' "$U/services/enable" >/dev/null
+$C "$U/packages" | grep -q 'class=pill>enabled<' || { echo "FAIL J: re-enable did not restore the label"; down; exit 1; }
 echo "PASS J"
 
 echo "=== K: editor refuses a binary file ==="

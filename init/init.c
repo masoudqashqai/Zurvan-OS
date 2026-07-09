@@ -155,7 +155,15 @@ static pid_t spawn_shell(void)
 		setsid();
 		setup_console();
 		ioctl(STDIN_FILENO, TIOCSCTTY, 1);
-		char *const argv[] = { (char *)shell, "-i", NULL };
+		/* Start it as an interactive LOGIN shell: argv[0] with a leading '-'
+		 * is the portable "login" signal (works for bash and busybox sh), so
+		 * it sources /etc/profile — where the Zurvan prompt lives, shared with
+		 * SSH sessions. Without this the console got bash's bare "bash-5.2#". */
+		const char *base = strrchr(shell, '/');
+		base = base ? base + 1 : shell;
+		char dashname[64];
+		snprintf(dashname, sizeof dashname, "-%s", base);   /* "-bash" / "-sh" */
+		char *const argv[] = { dashname, "-i", NULL };
 		char *const envp[] = {
 			"HOME=/root",
 			"TERM=linux",

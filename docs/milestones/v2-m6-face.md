@@ -259,3 +259,26 @@ Tests grew **I** (install output shown on success and on a broken tarball),
 **J** (enable nginx from Packages → it lands in `zurvan.yaml` services: and comes
 up live under the supervisor), and **K** (the editor refuses the nginx binary,
 no textarea). Full A–K passes in QEMU.
+
+### Third polish pass (2026-07-09, still panel testing)
+- **Stale "enabled" label after a runtime disable.** The Installed table read
+  "enabled" straight from `/run/svc/enabled`, but a Services-page disable leaves
+  the name there and drops a *marker* instead — so a disabled service kept
+  showing "enabled". The label now checks the disable markers too and shows
+  "disabled" (test J disables nginx and asserts the flip, then re-enables).
+- **The console prompt is no longer `bash-5.2#`.** PID 1 started the shell as
+  `bash -i` with no PS1. It now starts it as an interactive **login** shell
+  (argv[0] = `-bash`, the portable login signal), so it sources a new
+  `/etc/profile` — shared with SSH sessions — which sets a coloured
+  `\h:\w# ` prompt and a one-line greeting. One source of truth for both the
+  console and ssh. (`rootfs/` only ships `etc/`, so the prompt lives in
+  `/etc/profile`, not a `~/.bashrc` that wouldn't be packed.)
+- **Kernel messages stopped stomping the prompt.** Routine runtime kernel lines
+  (link up/down, `used greatest stack depth: … bytes left`, …) printed straight
+  over the interactive prompt, so you had to hit Enter for a clean one. `rc.init`
+  now lowers the console log level to 3 (KERN_ERR+) after boot — boot chatter is
+  untouched and everything still lands in `dmesg`, but the runtime console stays
+  quiet. (The redraw-after-async-write itself is inherent to a shared tty; this
+  removes the thing that actually triggered it.)
+  Verified by booting the live rootfs on the serial console: greeting + coloured
+  `zurvan-box:/#` prompt, no `bash-5.2#`.

@@ -159,4 +159,12 @@ else
 	echo "[rc.init] zurvan.rw set — leaving root writable"
 fi
 
+# --- quiet the console for interactive use ------------------------------------
+# Boot chatter has all been shown by now. Lower the console log level so routine
+# kernel messages at runtime (link up/down, "greatest stack depth: … bytes
+# left", and friends) stop printing over the shell prompt — the thing that made
+# you press Enter to get a clean prompt back. They still land in dmesg. 3 keeps
+# KERN_ERR and worse on the console; everything chattier is hidden.
+echo 3 > /proc/sys/kernel/printk 2>/dev/null || true
+
 echo "[rc.init] done."

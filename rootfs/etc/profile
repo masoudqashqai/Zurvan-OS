@@ -1,0 +1,28 @@
+# /etc/profile — sourced by login shells: the console (PID 1 starts it as a
+# login shell) and every SSH session. Keep it small and POSIX-ish; busybox sh
+# reads this too when bash is absent.
+
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PAGER=less
+
+# The prompt. The bare "bash-5.2#" default says nothing about the machine; this
+# shows the hostname and the working directory, lightly coloured (safe on the
+# linux console and over SSH). '#' because Zurvan's shell is always root.
+#   \h host   \w cwd   \e[…m colour   \[ \] mark non-printing bytes for readline
+if [ -n "$BASH_VERSION" ]; then
+	PS1='\[\e[38;5;39m\]\h\[\e[0m\]:\[\e[38;5;179m\]\w\[\e[0m\]# '
+else
+	# busybox ash expands \h/\w but not the \[ \] width markers — omit them so
+	# it doesn't miscount the line and corrupt editing.
+	PS1='\h:\w# '
+fi
+export PS1
+
+# A one-line greeting, once, on an interactive shell. The panel URL + token are
+# printed separately at boot (and by `zurvan-panel`); this just names the box.
+case "$-" in
+	*i*)
+		printf '\n  \033[38;5;39mZurvan\033[0m — the snake sheds, the lion remembers.\n'
+		printf '  %s · try: zurvan-panel · zurvan-svc state · zurvan-pkg list\n\n' "$(hostname 2>/dev/null || echo zurvan)"
+		;;
+esac
