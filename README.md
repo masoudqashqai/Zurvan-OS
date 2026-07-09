@@ -6,8 +6,8 @@
 > entirely from RAM and keeps everything worth keeping on one `/data` partition.
 
 <p align="center">
-  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan.iso">
-    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan.iso%20(~42%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan.iso">
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-2.1.0.iso">
+    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan--2.1.0.iso%20(~42%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan-2.1.0.iso">
   </a>
   &nbsp;
   <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest">
@@ -47,7 +47,7 @@ provably identical to the day it was set up.
 
 ## Try it — live, no install
 
-Download **[zurvan.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan.iso)**
+Download **[zurvan-2.1.0.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-2.1.0.iso)**
 and boot it (VMware, QEMU, or real hardware). It comes up entirely in RAM, self-configures
 from its built-in YAML, and starts the **web admin panel** automatically. The console
 prints a banner:
@@ -178,7 +178,7 @@ Then, from the repo root:
 make all           # kernel + static userland + init/supervisor/lion/snake/face
 make catalog       # build the catalog packages (nginx, sqlite3, curl, hello, tick, …)
 scripts/make-keys.sh   # one-time: generate the image-signing key (kept in keys/, gitignored)
-scripts/make-iso.sh    # produce build/zurvan.iso (signed)
+scripts/make-iso.sh    # produce build/zurvan.iso + build/zurvan-<VERSION>.iso (signed)
 make run           # boot it in QEMU (-nographic; Ctrl-A X to exit)
 ```
 

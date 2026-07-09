@@ -179,5 +179,14 @@ grub-mkrescue -o "$ISO" "$STAGE"
 
 echo ">> done: $ISO"
 ls -lh "$ISO"
+
+# Version-stamped copy for release upload. The build/test scripts keep using the
+# stable "zurvan.iso" name; this is the artifact humans download from a release.
+# Version comes from the VERSION file (single source of truth), else "dev".
+VERSION="$(cat "$HERE/VERSION" 2>/dev/null || echo dev)"
+VERSIONED="$BUILD/zurvan-$VERSION.iso"
+cp -f "$ISO" "$VERSIONED"
+echo ">> release asset: $VERSIONED"
+
 echo ">> try it:  qemu-system-x86_64 -cdrom $ISO -m 256   (VGA window)"
 echo ">>     or:  qemu-system-x86_64 -cdrom $ISO -m 256 -nographic  (pick the serial entry)"
