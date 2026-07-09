@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan.iso">
-    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN%20v2-zurvan.iso%20(~39%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan.iso">
+    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan.iso%20(~42%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan.iso">
   </a>
   &nbsp;
   <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest">
@@ -123,36 +123,43 @@ Zurvan is tiny, but it is a **BIOS**, **x86-64** system today.
 
 Everything the panel does is possible over SSH with `vi` and one YAML file — but a server's
 face is a browser tab. Over HTTPS it shows live service state (with listening ports and
-uptime), the lion's snapshots with a restore button, the snake's job runner and history, a
-`/data` file browser and editor (upload, rename, copy, delete), package install/remove,
-signed image upgrades, and reboot. It runs as an ordinary supervised service and can be
-turned off with one line in the YAML.
+uptime) and per-service **restart / enable / disable**, the lion's snapshots with a restore
+button, the snake's job runner and history, a `/data` file browser and editor (new folder
+and file, upload, rename, copy, delete — binaries are protected from accidental edits), and
+package upload / install / **enable** / remove — enabling a service package writes it into
+`zurvan.yaml` and starts it live. Signed image upgrades and reboot round it out. Every
+action reports its result. It runs as an ordinary supervised service and can be turned off
+with one line in the YAML.
 
 ### Configuration is one YAML file
 
 ```yaml
-hostname: zurvan-box
+hostname: zurvan
 network:
   eth0:
     dhcp: true
 users:
-  - name: root
-    authorized_keys:
-      - "ssh-ed25519 AAAA... your-key"
+  - name: zurvan
+    # SSH is key-only. Paste your public key to allow remote login; until you
+    # do, administer from the console and the web-panel token (printed at boot).
+    # authorized_keys:
+    #   - "ssh-ed25519 AAAA... your-key"
 lion:
-  every: 24h        # snapshot schedule
+  every: 24h        # /data snapshot schedule
   keep: 7
 services:
   - networking
   - ssh
   - face            # the web panel (on by default)
-  # - lion          # the snapshot daemon
-  # - snake         # the job-queue runner
+  - lion            # daily /data snapshots (on by default)
+  - snake           # the sandboxed job runner (on by default)
   # - nginx         # once installed from the catalog
 ```
 
 The config lives at `/data/zurvan.yaml` (or the built-in `/etc/zurvan.yaml` when there is
-no disk). Every action is idempotent; it is reapplied on every boot.
+no disk). Every action is idempotent; it is reapplied on every boot. A fresh install ships
+with **no SSH credential and daily backups on** — you get in via the panel's first-boot
+token, then add your key.
 
 ---
 
@@ -169,7 +176,7 @@ Then, from the repo root:
 
 ```sh
 make all           # kernel + static userland + init/supervisor/lion/snake/face
-make catalog       # build the catalog packages (hello, tick, nginx, …)
+make catalog       # build the catalog packages (nginx, sqlite3, curl, hello, tick, …)
 scripts/make-keys.sh   # one-time: generate the image-signing key (kept in keys/, gitignored)
 scripts/make-iso.sh    # produce build/zurvan.iso (signed)
 make run           # boot it in QEMU (-nographic; Ctrl-A X to exit)
