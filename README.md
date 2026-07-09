@@ -82,8 +82,11 @@ only `/data` and the image live on disk.
 3. Remove the CD and reboot. The box now boots from the disk.
 
 On first boot it generates its SSH host keys and the panel's TLS identity on `/data`, so they
-stay stable across reboots. Edit `/data/zurvan.yaml` (over SSH or in the panel's file editor)
-to set the hostname, network, users, and which services run — then reboot to apply.
+stay stable across reboots. A fresh box ships with **no SSH credential**, so get in through the
+**web panel** (its login token prints to the console at first boot) or the console itself — then
+add your SSH key. Edit `/data/zurvan.yaml` to set the hostname, network, and users, and reboot to
+apply those; **services can be enabled or disabled live from the panel** (or with `zurvan-svc` /
+`zurvan-pkg enable`) with no reboot.
 
 Upgrades are equally simple and safe: feed a signed image bundle to `zurvan-upgrade` (or the
 panel's System page). It verifies the signature, writes the *inactive* slot, boots it once,
