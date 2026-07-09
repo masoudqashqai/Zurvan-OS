@@ -138,6 +138,33 @@ $C "$U/file?path=paneldir/note.txt" | grep -q 'files?path=paneldir' \
     || { echo "FAIL G: editor has no back link to its directory"; down; exit 1; }
 echo "PASS G"
 
+echo "=== I: install output is surfaced (success AND failure) ==="
+NGINXTAR="$($SSH 'cd /data && ls nginx-*.tar.gz' | tr -d '\r')"
+[ -n "$NGINXTAR" ] || { echo "FAIL I: no nginx tarball on /data"; down; exit 1; }
+# -L follows the PRG redirect; the landed /packages page carries the flash
+$C -L --data-urlencode "file=$NGINXTAR" "$U/packages/install" | grep -q 'installed nginx' \
+    || { echo "FAIL I: install success not shown"; down; exit 1; }
+$SSH 'echo not-a-tarball > /data/broken.tar.gz'
+$C -L -d 'file=broken.tar.gz' "$U/packages/install" | grep -qiE 'error|cannot|unpack' \
+    || { echo "FAIL I: install failure not shown to the user"; down; exit 1; }
+echo "PASS I"
+
+echo "=== J: enable a service package from Packages -> YAML + live ==="
+$C -L -d 'name=nginx' "$U/packages/enable" | grep -q 'enabled nginx' \
+    || { echo "FAIL J: enable output not shown"; down; exit 1; }
+$SSH 'grep -qE "^[[:space:]]*-[[:space:]]+nginx[[:space:]]*$" /data/zurvan.yaml' \
+    || { echo "FAIL J: nginx not added to services: in zurvan.yaml"; down; exit 1; }
+up=0; for _ in $(seq 1 15); do sleep 1; $SSH 'zurvan-svc state | grep -qE "^nginx [0-9]+ up"' && { up=1; break; }; done
+[ "$up" = 1 ] || { echo "FAIL J: nginx did not come up under the supervisor"; down; exit 1; }
+echo "PASS J"
+
+echo "=== K: editor refuses a binary file ==="
+$C "$U/file?path=apps/nginx/bin/nginx" | grep -qi 'binary file' \
+    || { echo "FAIL K: no binary warning in the editor"; down; exit 1; }
+$C "$U/file?path=apps/nginx/bin/nginx" | grep -q '<textarea' \
+    && { echo "FAIL K: editor rendered a textarea for a binary"; down; exit 1; }
+echo "PASS K"
+
 echo "=== H: disable stops ssh, survives reboot; enable brings it back ==="
 # -L: follow the redirect the POST returns. The handler settles the state
 # before redirecting, so the very page the browser lands on must already say

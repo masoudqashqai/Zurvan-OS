@@ -305,6 +305,44 @@ static void human_size(long long b, char *out, size_t n)
 	else        snprintf(out, n, "%.1f %s", v, u[i]);
 }
 
+static int path_exists(const char *p) { struct stat st; return stat(p, &st) == 0; }
+
+/* Is `name` a whole line of a small line-per-entry file (e.g. /run/svc/enabled)? */
+static int line_in_file(const char *path, const char *name)
+{
+	FILE *f = fopen(path, "r");
+	if (!f) return 0;
+	char l[256]; int found = 0;
+	while (fgets(l, sizeof l, f)) {
+		char *nl = strchr(l, '\n'); if (nl) *nl = 0;
+		if (strcmp(l, name) == 0) { found = 1; break; }
+	}
+	fclose(f);
+	return found;
+}
+
+/* --- one-shot flash message ------------------------------------------------
+ * A POST action does its work, stashes a result line here, and redirects; the
+ * next GET reads-and-deletes it and shows it once. This keeps Post/Redirect/Get
+ * (a browser refresh is a clean GET, never a re-run of the action) AND surfaces
+ * the output — which the actions used to throw away, so a failed install just
+ * silently reloaded. One file, since the panel serves one client at a time. */
+static void set_flash(const char *msg)
+{
+	if (!msg || !msg[0]) return;
+	save_file(g_dir, "flash", msg, strlen(msg));
+}
+static void take_flash(char *buf, size_t n)
+{
+	buf[0] = 0;
+	char p[512]; snprintf(p, sizeof p, "%s/flash", g_dir);
+	int fd = open(p, O_RDONLY);
+	if (fd < 0) return;
+	ssize_t r = read(fd, buf, n - 1);
+	close(fd); unlink(p);
+	if (r > 0) buf[r] = 0;
+}
+
 /* ==========================================================================
  * Views  (each returns HTML in *out)
  * ========================================================================== */
@@ -744,8 +782,32 @@ static void view_file(struct buf *out, const char *rel, const char *flash)
 	if (flash && flash[0]) { bputs(out, "<div class=card>"); besc(out, flash); bputs(out, "</div>"); }
 
 	char data[OUT_MAX]; data[0] = 0;
+	ssize_t rlen = 0;
 	int fd = open(abs, O_RDONLY);
-	if (fd >= 0) { ssize_t r = read(fd, data, sizeof data - 1); if (r > 0) data[r] = 0; close(fd); }
+	if (fd >= 0) { rlen = read(fd, data, sizeof data - 1); if (rlen > 0) data[rlen] = 0; else rlen = 0; close(fd); }
+
+	/* Refuse to edit a binary. The textarea is text-only and besc() stops at
+	 * the first NUL, so a binary would show truncated garbage AND — the real
+	 * hazard — Save would write that back, corrupting the file (and since
+	 * /usr/bin/* are symlinks into /data/apps, the installed program with it).
+	 * A NUL byte is the reliable "not text" tell. */
+	int binary = 0;
+	for (ssize_t i = 0; i < rlen; i++) if (!data[i]) { binary = 1; break; }
+	if (binary) {
+		bputs(out, "<div class=card><p class=bad>This looks like a binary file.</p>"
+		           "<p class=dim>The panel editor is text-only; opening it here would "
+		           "show garbage, and saving would corrupt the file. Fetch it over "
+		           "<span class=mono>scp</span> if you need it.</p></div>");
+		page_foot(out); return;
+	}
+	/* A text file bigger than the read buffer would load truncated, and saving
+	 * would drop the tail — warn instead of silently losing data. */
+	int truncated = (rlen == (ssize_t)sizeof data - 1);
+
+	if (truncated)
+		bputs(out, "<div class=card><p class=bad>This file is larger than the editor "
+		           "can safely hold; only the first part is shown. <b>Do not save</b> — "
+		           "it would truncate the file. Edit it over SSH instead.</p></div>");
 
 	bputs(out, "<form method=post action=/file><div class=card>");
 	bprintf(out, "<input type=hidden name=path value=\"%s\"><textarea name=content>", rel);
@@ -777,7 +839,11 @@ static void view_packages(struct buf *out, const char *flash)
 	char *pv[] = { "zurvan-pkg", "list", NULL };
 	run(pv, installed, sizeof installed, NULL);
 
-	/* Installed table: one "name version" line each, with an Uninstall button. */
+	/* Installed table: name + version, an Enable button for a SERVICE package
+	 * not yet declared, and Uninstall. A service is one that exported a .def on
+	 * install; "enabled" means it's in the supervisor's set (/run/svc/enabled).
+	 * A plain tool (hello, sqlite3, curl) exports no .def, so no Enable button
+	 * is ever shown for it — there is nothing to enable. */
 	bputs(out, "<h2>Installed</h2><div class=card><table class=pkg>"
 	           "<tr><th>Package</th><th>Version</th><th></th></tr>");
 	int ninst = 0;
@@ -789,12 +855,24 @@ static void view_packages(struct buf *out, const char *flash)
 			if (sscanf(line, "%127s %63s", name, ver) >= 1 &&
 			    name[0] && name[0] != '[' && strcmp(name, "no") != 0) {
 				ninst++;
-				bprintf(out, "<tr><td class=mono>%s</td><td class=dim>%s</td>"
-				             "<td><form class=inline method=post action=/packages/remove "
+				char defp[256]; snprintf(defp, sizeof defp, "/run/svc/%s.def", name);
+				int is_svc = path_exists(defp);
+				int is_en  = line_in_file("/run/svc/enabled", name);
+				bprintf(out, "<tr><td class=mono>%s</td><td class=dim>%s</td><td class=row>",
+				        name, ver);
+				if (is_svc && !is_en)
+					bprintf(out, "<form class=inline method=post action=/packages/enable "
+					             "onsubmit=\"return confirm('Enable %s? It is added to "
+					             "services: in zurvan.yaml and started now.')\">"
+					             "<input type=hidden name=name value=\"%s\">"
+					             "<button>Enable</button></form>", name, name);
+				else if (is_svc)
+					bputs(out, "<a href=/services class=pill>enabled</a>");
+				bprintf(out, "<form class=inline method=post action=/packages/remove "
 				             "onsubmit=\"return confirm('Uninstall %s?')\">"
 				             "<input type=hidden name=name value=\"%s\">"
 				             "<button class=r>Uninstall</button></form></td></tr>",
-				        name, ver, name, name);
+				        name, name);
 			}
 			line = strtok(NULL, "\n");
 		}
@@ -1000,25 +1078,32 @@ static void handle(const struct req *r, struct buf *resp)
 	if (strcmp(r->method, "POST") == 0) {
 		const char *body = r->body ? r->body : "";
 		char arg[1200] = "", out[OUT_MAX];
+		/* Actions capture the CLI's output and stash it as a one-shot flash,
+		 * then redirect (PRG) — so the result, success or failure, shows on the
+		 * next page load instead of being silently discarded. */
 		if (strcmp(r->path, "/services/restart") == 0 && form_get(body, "name", arg, sizeof arg)) {
 			char *v[] = { "zurvan-svc", "restart", arg, NULL };
 			run(v, out, sizeof out, NULL);
+			set_flash(out[0] ? out : "restart signalled.");
 			redirect(resp, "/services", NULL); return;
 		}
 		if (strcmp(r->path, "/services/disable") == 0 && form_get(body, "name", arg, sizeof arg)) {
 			char *v[] = { "zurvan-svc", "disable", arg, NULL };
 			run(v, out, sizeof out, NULL);
+			set_flash(out[0] ? out : "disabled.");
 			svc_settle(arg, "disabled", 2500);   /* SIGTERM lands fast */
 			redirect(resp, "/services", NULL); return;
 		}
 		if (strcmp(r->path, "/services/enable") == 0 && form_get(body, "name", arg, sizeof arg)) {
 			char *v[] = { "zurvan-svc", "enable", arg, NULL };
 			run(v, out, sizeof out, NULL);
+			set_flash(out[0] ? out : "enabled.");
 			svc_settle(arg, "up", 3000);          /* waits out the heartbeat + deps */
 			redirect(resp, "/services", NULL); return;
 		}
 		if (strcmp(r->path, "/snapshots/snap") == 0) {
 			char *v[] = { "zurvan-lion", "snap", NULL }; run(v, out, sizeof out, NULL);
+			set_flash(out[0] ? out : "snapshot taken.");
 			redirect(resp, "/snapshots", NULL); return;
 		}
 		if (strcmp(r->path, "/snapshots/restore") == 0 && form_get(body, "name", arg, sizeof arg)) {
@@ -1030,35 +1115,53 @@ static void handle(const struct req *r, struct buf *resp)
 				char *v[] = { "zurvan-lion", "restore", arg, NULL };
 				run(v, out, sizeof out, NULL);
 			}
+			set_flash(out[0] ? out : "restore done.");
 			redirect(resp, "/snapshots", NULL); return;
 		}
 		if (strcmp(r->path, "/jobs/run") == 0 && form_get(body, "script", arg, sizeof arg)) {
 			char *v[] = { "zurvan-snake", "run", "-", NULL };
 			run(v, out, sizeof out, arg);
+			set_flash(out[0] ? out : "job submitted.");
 			redirect(resp, "/jobs", NULL); return;
 		}
 		if (strcmp(r->path, "/packages/install") == 0 && form_get(body, "file", arg, sizeof arg)) {
+			out[0] = 0;
 			if (name_safe(arg)) {
 				char full[1300]; snprintf(full, sizeof full, "/data/%s", arg);
 				char *v[] = { "zurvan-pkg", "install", full, NULL };
 				run(v, out, sizeof out, NULL);
-			}
+			} else snprintf(out, sizeof out, "refused unsafe package name");
+			set_flash(out[0] ? out : "installed.");
+			redirect(resp, "/packages", NULL); return;
+		}
+		if (strcmp(r->path, "/packages/enable") == 0 && form_get(body, "name", arg, sizeof arg)) {
+			out[0] = 0;
+			if (name_safe(arg)) {
+				char *v[] = { "zurvan-pkg", "enable", arg, NULL };
+				run(v, out, sizeof out, NULL);
+				svc_settle(arg, "up", 3000);   /* supervisor rescan + start */
+			} else snprintf(out, sizeof out, "refused unsafe package name");
+			set_flash(out[0] ? out : "enabled.");
 			redirect(resp, "/packages", NULL); return;
 		}
 		/* --- uploads (multipart): save the file onto /data, then redirect --- */
 		if (strcmp(r->path, "/packages/remove") == 0 && form_get(body, "name", arg, sizeof arg)) {
+			out[0] = 0;
 			if (name_safe(arg)) {
 				char *v[] = { "zurvan-pkg", "remove", arg, NULL };
 				run(v, out, sizeof out, NULL);
-			}
+			} else snprintf(out, sizeof out, "refused unsafe package name");
+			set_flash(out[0] ? out : "removed.");
 			redirect(resp, "/packages", NULL); return;
 		}
 		if (strcmp(r->path, "/packages/delete") == 0 && form_get(body, "file", arg, sizeof arg)) {
 			size_t al = strlen(arg);
 			if (name_safe(arg) && al > 7 && strcmp(arg + al - 7, ".tar.gz") == 0) {
 				char full[1300]; snprintf(full, sizeof full, "/data/%s", arg);
-				unlink(full);
-			}
+				if (unlink(full) == 0) snprintf(out, sizeof out, "deleted %s from /data", arg);
+				else                   snprintf(out, sizeof out, "could not delete %s: %s", arg, strerror(errno));
+			} else snprintf(out, sizeof out, "refused: %s is not a .tar.gz on /data", arg);
+			set_flash(out);
 			redirect(resp, "/packages", NULL); return;
 		}
 		if (strcmp(r->path, "/packages/upload") == 0) {
@@ -1146,15 +1249,14 @@ static void handle(const struct req *r, struct buf *resp)
 			redirect(resp, to, NULL); return;
 		}
 		if (strcmp(r->path, "/system/upgrade") == 0 && form_get(body, "file", arg, sizeof arg)) {
-			char flash[OUT_MAX] = "";
+			out[0] = 0;
 			if (!strstr(arg, "..") && !strchr(arg, '/')) {
 				char full[1300]; snprintf(full, sizeof full, "/data/%s", arg);
 				char *v[] = { "zurvan-upgrade", full, NULL };
-				run(v, flash, sizeof flash, NULL);
-			} else snprintf(flash, sizeof flash, "bad bundle name");
-			view_system(&page, flash);
-			respond(resp, "200 OK", "text/html", NULL, page.p, page.n);
-			free(page.p); return;
+				run(v, out, sizeof out, NULL);
+			} else snprintf(out, sizeof out, "bad bundle name");
+			set_flash(out[0] ? out : "staged.");
+			redirect(resp, "/system", NULL); return;
 		}
 		if (strcmp(r->path, "/system/reboot") == 0) {
 			/* Full page with the RIGHT length (the old hardcoded 20 truncated
@@ -1186,10 +1288,14 @@ static void handle(const struct req *r, struct buf *resp)
 	}
 
 	/* --- GET pages --- */
+	/* A one-shot flash left by the last action (see set_flash) shows once on
+	 * the page it redirected to, then is consumed. */
+	char fl[OUT_MAX]; take_flash(fl, sizeof fl);
+	char *flash = fl[0] ? fl : NULL;
 	if      (strcmp(r->path, "/") == 0)          view_overview(&page);
-	else if (strcmp(r->path, "/services") == 0)  view_services(&page, NULL);
-	else if (strcmp(r->path, "/snapshots") == 0) view_snapshots(&page, NULL);
-	else if (strcmp(r->path, "/jobs") == 0)      view_jobs(&page, NULL);
+	else if (strcmp(r->path, "/services") == 0)  view_services(&page, flash);
+	else if (strcmp(r->path, "/snapshots") == 0) view_snapshots(&page, flash);
+	else if (strcmp(r->path, "/jobs") == 0)      view_jobs(&page, flash);
 	else if (strcmp(r->path, "/job") == 0) {
 		char id[128] = ""; form_get(r->query, "id", id, sizeof id); view_job(&page, id);
 	}
@@ -1199,8 +1305,8 @@ static void handle(const struct req *r, struct buf *resp)
 	else if (strcmp(r->path, "/file") == 0) {
 		char p[1024] = ""; form_get(r->query, "path", p, sizeof p); view_file(&page, p, NULL);
 	}
-	else if (strcmp(r->path, "/packages") == 0)  view_packages(&page, NULL);
-	else if (strcmp(r->path, "/system") == 0)    view_system(&page, NULL);
+	else if (strcmp(r->path, "/packages") == 0)  view_packages(&page, flash);
+	else if (strcmp(r->path, "/system") == 0)    view_system(&page, flash);
 	else { respond(resp, "404 Not Found", "text/html", NULL, "not found", 9); return; }
 
 	respond(resp, "200 OK", "text/html", NULL, page.p, page.n);

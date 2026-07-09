@@ -210,6 +210,40 @@ cmd_install() {
 	fi
 }
 
+# Enable an installed SERVICE package: make it part of what this box runs.
+# Two representations, kept in step: the YAML services: list (the authored,
+# reproducible source of truth) AND /run/svc/enabled (the digest the running
+# supervisor rescans each heartbeat, so it starts now without a reboot).
+# Non-service packages are refused here — they have nothing to enable.
+cmd_enable() {
+	need_data
+	name="$1"
+	[ -d "$APPS/$name" ] || fail "$name is not installed"
+	[ -f "/run/svc/$name.def" ] \
+		|| fail "$name is not a service (its manifest has no service: block) — nothing to enable"
+
+	yaml=/data/zurvan.yaml
+	if [ -f "$yaml" ] && grep -qE "^[[:space:]]*-[[:space:]]+$name[[:space:]]*$" "$yaml"; then
+		: # already declared
+	elif [ -f "$yaml" ] && grep -qE "^services:" "$yaml"; then
+		# insert as the first entry under the existing services: block
+		awk -v n="$name" '
+			{ print }
+			/^services:/ && !done { print "  - " n; done = 1 }
+		' "$yaml" > "$yaml.tmp" && mv "$yaml.tmp" "$yaml"
+	elif [ -f "$yaml" ]; then
+		printf '\nservices:\n  - %s\n' "$name" >> "$yaml"
+	else
+		printf 'services:\n  - %s\n' "$name" > "$yaml"
+	fi
+
+	# Live pickup + clear any stale disable marker from a previous life.
+	mkdir -p /run/svc
+	grep -qx "$name" /run/svc/enabled 2>/dev/null || echo "$name" >> /run/svc/enabled
+	rm -f "/data/svc/disabled/$name" "/run/svc/disabled/$name" 2>/dev/null || true
+	log "enabled $name — added to services: in zurvan.yaml; the supervisor starts it within a second"
+}
+
 cmd_remove() {
 	need_data
 	open_root
@@ -251,7 +285,7 @@ cmd_dress() {
 
 # --- dispatch -----------------------------------------------------------------------
 usage() {
-	echo "usage: zurvan-pkg install <pkg.tar.gz> | remove <name> | list | dress" >&2
+	echo "usage: zurvan-pkg install <pkg.tar.gz> | remove <name> | enable <name> | list | dress" >&2
 	exit 1
 }
 [ $# -ge 1 ] || usage
@@ -259,6 +293,7 @@ cmd="$1"; shift
 case "$cmd" in
 	install) [ $# -eq 1 ] || usage; cmd_install "$1" ;;
 	remove)  [ $# -eq 1 ] || usage; cmd_remove "$1" ;;
+	enable)  [ $# -eq 1 ] || usage; cmd_enable "$1" ;;
 	list)    cmd_list ;;
 	dress)   cmd_dress ;;
 	*) usage ;;

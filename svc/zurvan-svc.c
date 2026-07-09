@@ -165,14 +165,23 @@ static int load_def(struct svc *s)
 	return s->exec[0] ? 0 : -1;
 }
 
-static void load_enabled(void)
+/* Read /run/svc/enabled and add any service not already known. Idempotent:
+ * find() skips ones we already run, so this is safe to call every heartbeat —
+ * which is how a service enabled AFTER boot (zurvan-pkg enable, the panel)
+ * gets picked up live, without restarting the supervisor. `startup` gates the
+ * one-time chatter (the summary line and the missing-def warning); a live
+ * rescan is silent except for spawn()'s own "started X". Returns how many it
+ * newly added. */
+static int load_enabled(int startup)
 {
 	FILE *f = fopen("/run/svc/enabled", "r");
 	if (!f) {
-		svc_log("nothing enabled (/run/svc/enabled missing) — idling.");
-		return;
+		if (startup)
+			svc_log("nothing enabled (/run/svc/enabled missing) — idling.");
+		return 0;
 	}
 
+	int before = nsvcs;
 	char line[LINE_LEN];
 	while (fgets(line, sizeof line, f) && nsvcs < MAX_SVCS) {
 		chomp(line);
@@ -183,9 +192,12 @@ static void load_enabled(void)
 		memset(s, 0, sizeof *s);
 		snprintf(s->name, sizeof s->name, "%s", line);
 		if (load_def(s) != 0) {
-			svc_log("WARNING: no definition for '%s' — skipping "
-			     "(want %s.def in /etc/svc or a package service: block)",
-			     s->name, s->name);
+			/* On a live rescan the .def may simply not be written yet;
+			 * stay quiet and pick it up on a later tick. */
+			if (startup)
+				svc_log("WARNING: no definition for '%s' — skipping "
+				     "(want %s.def in /etc/svc or a package service: block)",
+				     s->name, s->name);
 			continue;
 		}
 		s->backoff = BACKOFF_MIN;
@@ -193,7 +205,11 @@ static void load_enabled(void)
 		nsvcs++;
 	}
 	fclose(f);
-	svc_log("%d service(s) enabled.", nsvcs);
+	if (startup)
+		svc_log("%d service(s) enabled.", nsvcs);
+	else if (nsvcs > before)
+		svc_log("picked up %d newly enabled service(s)", nsvcs - before);
+	return nsvcs - before;
 }
 
 /* --- running ----------------------------------------------------------------- */
@@ -479,12 +495,13 @@ int main(int argc, char **argv)
 	signal(SIGPIPE, SIG_IGN);
 
 	mkdir("/run/svc", 0755);
-	load_enabled();
+	load_enabled(1);
 
 	/* The heartbeat. Never returns, even with nothing to supervise —
 	 * exiting would just make PID 1 spin respawning us. */
 	for (;;) {
 		reap();
+		load_enabled(0);        /* pick up anything enabled since last tick */
 		stop_disabled();
 		start_due();
 		sleep(1);

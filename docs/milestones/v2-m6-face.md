@@ -221,3 +221,41 @@ drops a plain `-static`). Both verified on a fresh install: install exit 0,
 `sqlite3 select` returns, curl reports BearSSL and validates a real public
 cert. busybox already covers DHCP/DNS server duty (`udhcpd`, `dnsd`, `ntpd`,
 `httpd`), so dnsmasq was skipped as redundant.
+
+### Second polish pass (2026-07-09, more panel testing)
+Three things the user hit using the panel, plus the design question behind them:
+
+- **Enable a service from the Packages page** (not just the raw YAML). Installing
+  a service package (nginx) left you to hand-edit `zurvan.yaml` and reboot before
+  it ran — and a freshly installed service isn't in `/run/svc/enabled`, so it
+  didn't even appear on the Services page. Decided *against* auto-enabling on
+  install (silently starting a network daemon breaks the declarative model and
+  the security posture); instead the **Installed** table shows an **Enable**
+  button, but only for a package that exported a service `.def` — a plain tool
+  (hello, sqlite3, curl) never shows one, which answers "what about non-service
+  packages?" cleanly. `zurvan-pkg enable <name>` adds the name to `services:` in
+  `zurvan.yaml` (the authored, reproducible truth) *and* to `/run/svc/enabled`;
+  the supervisor now **rescans `/run/svc/enabled` every heartbeat** (idempotent —
+  `find()` skips known services), so it starts live without a reboot. The box
+  stays fully described by image+YAML+/data.
+- **Actions no longer swallow their output.** install/remove/delete-file, lion
+  snap/restore, snake run, service restart/enable/disable, and image upgrade all
+  captured the CLI's stdout+stderr and then threw it away on redirect — so a
+  failed install just silently reloaded with nothing installed. Added a one-shot
+  **flash file** (`<dir>/flash`): the action writes the result there and
+  redirects (keeps Post/Redirect/Get — a refresh is a clean GET, never a re-run),
+  and the next page read-and-deletes it and shows it once. `/system/upgrade`,
+  which used to render-in-place with its flash, was moved onto the same path for
+  one consistent pattern.
+- **Editor refuses binaries.** Opening a binary in the file editor didn't crash,
+  but `besc()` stops at the first NUL so it showed truncated garbage — and Save
+  would write that back, corrupting the file (and, via the `/usr/bin` symlinks,
+  the installed program). The editor now detects a NUL byte and shows a "this is
+  a binary file" notice with no textarea. It also warns (and says don't save)
+  when a text file is larger than the editor buffer, which would truncate on
+  save.
+
+Tests grew **I** (install output shown on success and on a broken tarball),
+**J** (enable nginx from Packages → it lands in `zurvan.yaml` services: and comes
+up live under the supervisor), and **K** (the editor refuses the nginx binary,
+no textarea). Full A–K passes in QEMU.
