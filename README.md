@@ -53,8 +53,11 @@ from its built-in YAML, and starts the **web admin panel** automatically. The co
 prints a banner:
 
 ```
- WEB PANEL:  https://<this-box-ip>:8443/
- LOGIN TOKEN: <16 hex chars>
++------------------------------------------+
+| Zurvan web panel                         |
+| URL:    https://<this-box-ip>:8443/      |
+| Token:  <16 hex chars>                   |
++------------------------------------------+
 ```
 
 Open that URL in your browser (accept the self-signed certificate — it's per-box and made
@@ -116,7 +119,7 @@ Zurvan is tiny, but it is a **BIOS**, **x86-64** system today.
 | **Userland** | static [busybox](userland/build-busybox.sh), [bash](userland/build-bash.sh), [dropbear](userland/build-dropbear.sh) (SSH), [e2fsprogs](userland/build-e2fsprogs.sh), [gpgv](userland/build-gpgv.sh), [BearSSL](userland/build-bearssl.sh) — all static |
 | **Init (PID 1)** | [~200 lines of C](init/init.c): mounts, console, supervision, reaping — and it never exits |
 | **Verified boot** | GPG-signed kernel/initrd/modules enforced by GRUB; A/B image slots with a signature-gated `zurvan-upgrade` and automatic rollback; read-only root |
-| **Supervisor** | [`zurvan-svc`](svc/) — a small declarative service manager: dependency order, restart-on-crash, `no_new_privs`, drop-to-user |
+| **Supervisor** | [`zurvan-svc`](svc/) — a small declarative service manager: dependency order, restart-on-crash, live enable/disable, `no_new_privs`, drop-to-user |
 | **Packages** | [`zurvan-pkg`](packages/pkgtool/) — install static-binary packages from a curated [catalog](catalog/); the [set-dresser](packages/pkgtool/) links them into standard paths every boot |
 | **The lion** | [`zurvan-lion`](lion/) — checksummed, atomic `/data` snapshots in a ring buffer; overlay or exact (mirror) restore |
 | **The snake** | [`zurvan-snake`](snake/) — runs jobs in an evaporating tmpfs mount-namespace sandbox; nothing touches the host |
@@ -223,4 +226,5 @@ beyond v2: UEFI + enroll-your-own-key Secure Boot, TPM-sealed keys, and image/co
 ## License
 
 [MIT](LICENSE). The components Zurvan builds from source (Linux, busybox, bash, dropbear,
-e2fsprogs, GnuPG, BearSSL, nginx) keep their own upstream licenses.
+e2fsprogs, GnuPG, BearSSL, and the catalog packages — nginx, sqlite3, curl) keep their own
+upstream licenses.
