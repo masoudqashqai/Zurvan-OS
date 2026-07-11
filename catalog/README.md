@@ -42,19 +42,22 @@ in the pack unless it earns a line in [`on-iso.txt`](on-iso.txt).
 ## The catalog pack
 
 ```sh
-make catalog-pack     # -> build/zurvan-catalog-<VERSION>.tar.gz (+ .sig, .sha256)
+make catalog-pack     # -> build/zurvan-catalog-<DATE>.tar.gz (+ .sig, .sha256)
 ```
 
-Published next to the ISO on the [releases page](https://github.com/masoudqashqai/Zurvan-OS/releases).
-It holds **every** package, including the four already on the ISO — one
-artifact, so you never have to work out which half you have.
+Published as its own date-stamped release (tag `catalog-<DATE>`) on the
+[releases page](https://github.com/masoudqashqai/Zurvan-OS/releases) — the
+catalog has its own cadence, and an OS version only ever means the image
+changed. Packages are static binaries with no OS coupling, so any pack runs on
+any v2.x image. The pack holds **every** package, including the four already
+on the ISO — one artifact, so you never have to work out which half you have.
 
 The pack is signed with the same key that signs the kernel and initrd, so you
 can verify it in either place. On your own machine:
 
 ```sh
-gpg --verify zurvan-catalog-2.3.0.tar.gz.sig zurvan-catalog-2.3.0.tar.gz
-sha256sum -c zurvan-catalog-2.3.0.tar.gz.sha256
+gpg --verify zurvan-catalog-2026.07.11.tar.gz.sig zurvan-catalog-2026.07.11.tar.gz
+sha256sum -c zurvan-catalog-2026.07.11.tar.gz.sha256
 ```
 
 Or on the box itself — every Zurvan image carries `gpgv` and the trust anchor
@@ -62,8 +65,8 @@ at `/etc/zurvan-signing.pub`, which is the same check `zurvan-upgrade` runs on
 an image before it will touch a disk:
 
 ```sh
-gpgv --keyring /etc/zurvan-signing.pub zurvan-catalog-2.3.0.tar.gz.sig \
-                                       zurvan-catalog-2.3.0.tar.gz
+gpgv --keyring /etc/zurvan-signing.pub zurvan-catalog-2026.07.11.tar.gz.sig \
+                                       zurvan-catalog-2026.07.11.tar.gz
 ```
 
 Then get a package onto the box the way you'd move any other file — the panel's

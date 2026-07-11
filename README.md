@@ -6,18 +6,18 @@
 > entirely from RAM and keeps everything worth keeping on one `/data` partition.
 
 <p align="center">
-  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-2.3.0.iso">
-    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan--2.3.0.iso%20(~41%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan-2.3.0.iso">
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/download/v2.2.0/zurvan-2.2.0.iso">
+    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan--2.2.0.iso%20(~41%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan-2.2.0.iso">
   </a>
   &nbsp;
-  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest">
-    <img src="https://img.shields.io/github/v/release/masoudqashqai/Zurvan-OS?style=for-the-badge&label=RELEASE" alt="Latest release">
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases">
+    <img src="https://img.shields.io/github/v/release/masoudqashqai/Zurvan-OS?style=for-the-badge&label=RELEASE&filter=v*" alt="Latest OS release">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-catalog-2.3.0.tar.gz">
-    <img src="https://img.shields.io/badge/catalog%20pack-zurvan--catalog--2.3.0.tar.gz%20(~22%20MB)-555555?style=flat-square&logo=gnuprivacyguard&logoColor=white" alt="Download the catalog pack">
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/download/catalog-2026.07.11/zurvan-catalog-2026.07.11.tar.gz">
+    <img src="https://img.shields.io/badge/catalog%20pack-zurvan--catalog--2026.07.11.tar.gz%20(~22%20MB)-555555?style=flat-square&logo=gnuprivacyguard&logoColor=white" alt="Download the catalog pack">
   </a>
   <br><em>The ISO carries four packages. The signed catalog pack carries the rest.</em>
 </p>
@@ -54,7 +54,7 @@ provably identical to the day it was set up.
 
 ## Try it — live, no install
 
-Download **[zurvan-2.3.0.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-2.3.0.iso)**
+Download **[zurvan-2.2.0.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/download/v2.2.0/zurvan-2.2.0.iso)**
 and boot it (VMware, QEMU, or real hardware). It comes up entirely in RAM, self-configures
 from its built-in YAML, and starts the **web admin panel** automatically. The console
 prints a banner:
@@ -194,11 +194,14 @@ you install it; the rest ship in the signed catalog pack:
 | [`caddy`](catalog/build-caddy.sh) | — | Web server / reverse proxy, one static Go binary — serves :8080, recipes for proxying and auto-HTTPS inside |
 | [`hello`](catalog/build-hello.sh), [`zurvanos`](catalog/build-zurvanos.sh) | — | The smallest possible packages — proof the pipeline works |
 
-The rest of the catalog is a **separate signed download**,
-`zurvan-catalog-<VERSION>.tar.gz`, published next to the ISO on the
-[releases page](https://github.com/masoudqashqai/Zurvan-OS/releases). Verify it,
-then upload a package through the panel or `scp` it across — nothing on the box
-ever fetches software over the network, which is the whole point.
+The rest of the catalog is a **separate signed download** with its own release
+cadence: `zurvan-catalog-<DATE>.tar.gz` on the
+[releases page](https://github.com/masoudqashqai/Zurvan-OS/releases). The pack
+is date-stamped, not OS-versioned — an OS release means the image changed, a
+catalog release means the curated set grew, and packages (static binaries, no
+OS coupling) run on any v2.x image. Verify the pack, then upload a package
+through the panel or `scp` it across — nothing on the box ever fetches
+software over the network, which is the whole point.
 
 That split is deliberate: the catalog can grow to any size without the ISO
 gaining a byte. See [`catalog/README.md`](catalog/README.md).
@@ -219,7 +222,7 @@ Then, from the repo root:
 ```sh
 make all           # kernel + static userland + init/supervisor/lion/snake/face
 make catalog       # build the catalog packages (nginx, sqlite3, curl, hello, tick, …)
-make catalog-pack  # pack them as a signed release download (build/zurvan-catalog-<VERSION>.tar.gz)
+make catalog-pack  # pack them as a signed release download (build/zurvan-catalog-<DATE>.tar.gz)
 scripts/make-keys.sh   # one-time: generate the image-signing key (kept in keys/, gitignored)
 scripts/make-iso.sh    # produce build/zurvan.iso + build/zurvan-<VERSION>.iso (signed)
 make run           # boot it in QEMU (-nographic; Ctrl-A X to exit)

@@ -2,9 +2,16 @@
 # make-catalog-pack.sh — pack the whole catalog as one downloadable release asset.
 #
 #   scripts/make-catalog-pack.sh
-#     -> build/zurvan-catalog-<VERSION>.tar.gz        the pack
-#     -> build/zurvan-catalog-<VERSION>.tar.gz.sig    detached signature
-#     -> build/zurvan-catalog-<VERSION>.tar.gz.sha256
+#     -> build/zurvan-catalog-<DATE>.tar.gz        the pack
+#     -> build/zurvan-catalog-<DATE>.tar.gz.sig    detached signature
+#     -> build/zurvan-catalog-<DATE>.tar.gz.sha256
+#
+# The pack is DATE-stamped (2026.07.11), not OS-versioned: the catalog has its
+# own release cadence. An OS version means "the image changed"; a catalog
+# release means "the curated set grew" — the whole point of the on-ISO split
+# is that the second never implies the first. Packages are static binaries
+# with no OS coupling, so any pack runs on any v2.x image. Publish it as its
+# own GitHub release (tag catalog-<DATE>); OS releases carry only the ISO.
 #
 # The ISO carries only the tier in catalog/on-iso.txt, so that catalog growth
 # never grows the ISO. This is where the rest of the catalog goes: you download
@@ -25,7 +32,7 @@ BUILD="${BUILD:-$HERE/build}"
 CAT="$BUILD/catalog"
 SIGN="$HERE/scripts/sign.sh"
 
-VERSION="$(cat "$HERE/VERSION" 2>/dev/null || echo dev)"
+VERSION="${CATALOG_VERSION:-$(date +%Y.%m.%d)}"
 PACK="$BUILD/zurvan-catalog-$VERSION.tar.gz"
 
 ls "$CAT"/*.tar.gz >/dev/null 2>&1 \
@@ -63,9 +70,9 @@ oniso_names=$(sed 's/#.*//' "$HERE/catalog/on-iso.txt" 2>/dev/null || true)
 tar -czf "$PACK" -C "$STAGE" "zurvan-catalog-$VERSION"
 echo ">> catalog pack: $PACK ($(du -h "$PACK" | cut -f1), $(ls "$CAT"/*.tar.gz | wc -l) packages)"
 
-# Same signing key as the images. The box cannot verify this yet (no gpgv in
-# the image — see ROADMAP); today the signature is for the human who downloads
-# it:  gpg --verify zurvan-catalog-<V>.tar.gz.sig zurvan-catalog-<V>.tar.gz
+# Same signing key as the images, so the pack verifies in either place:
+# on your machine with gpg --verify, or on the box itself with the gpgv +
+# trust anchor (/etc/zurvan-signing.pub) that every image already carries.
 if [ -f "$HERE/keys/zurvan-signing.pub" ]; then
 	"$SIGN" "$PACK"
 	echo ">> signed: $PACK.sig"
