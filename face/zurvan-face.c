@@ -825,15 +825,17 @@ static void view_packages(struct buf *out, const char *flash)
 
 	info_box(out, "What is this page?",
 	    "<p>A Zurvan package is a <span class=mono>.tar.gz</span> of static binaries plus a "
-	    "manifest. <b>Upload</b> one below (or drop it in <span class=mono>/data</span>), then "
-	    "<b>Install</b> — it unpacks into <span class=mono>/data/apps</span> and its files are "
-	    "linked into the standard paths on every boot.</p>");
+	    "manifest, with a detached <span class=mono>.sig</span> beside it. <b>Upload</b> both "
+	    "below (or drop them in <span class=mono>/data</span>), then <b>Install</b> — the "
+	    "signature is verified before anything is unpacked, then files are linked into the "
+	    "standard paths on every boot.</p>");
 
 	bputs(out, "<h2>Upload a package</h2><div class=card>"
 	           "<form method=post action=/packages/upload enctype=multipart/form-data>"
-	           "<div class=row><input type=file name=file accept=.gz,.tgz,.tar.gz>"
+	           "<div class=row><input type=file name=file accept=.gz,.tgz,.tar.gz,.sig>"
 	           "<button>Upload to /data</button></div>"
-	           "<p class=dim>Then click Install below.</p></form></div>");
+	           "<p class=dim>Upload the package's .sig the same way (the catalog pack ships one "
+	           "per package), then click Install below.</p></form></div>");
 
 	char installed[8192] = "";
 	char *pv[] = { "zurvan-pkg", "list", NULL };
@@ -910,13 +912,27 @@ static void view_packages(struct buf *out, const char *flash)
 				size_t nl = strlen(nm);
 				if (nl && strncmp(e->d_name, nm, nl) == 0 && e->d_name[nl] == '-') { is_inst = 1; break; }
 			}
+			/* Verified installs need the detached .sig beside the tarball.
+			 * Without one, installing is still possible — but as an explicit,
+			 * confirmed act, mirroring `zurvan-pkg install --unsigned`. */
+			char sigp[1300]; snprintf(sigp, sizeof sigp, "/data/%s.sig", e->d_name);
+			int has_sig = path_exists(sigp);
 			bprintf(out, "<tr><td class=mono>%s</td><td>", e->d_name);
 			if (is_inst)
 				bputs(out, "<span class=ok>&#10003; installed</span>");
-			else
+			else if (has_sig)
 				bprintf(out, "<form class=inline method=post action=/packages/install>"
 				             "<input type=hidden name=file value=\"%s\">"
 				             "<button>Install</button></form>", e->d_name);
+			else
+				bprintf(out, "<span class=dim>no .sig</span> "
+				             "<form class=inline method=post action=/packages/install "
+				             "onsubmit=\"return confirm('No signature for %s — install UNSIGNED? "
+				             "Only do this for a package you built yourself.')\">"
+				             "<input type=hidden name=file value=\"%s\">"
+				             "<input type=hidden name=unsigned value=1>"
+				             "<button class=g>Install unsigned</button></form>",
+				        e->d_name, e->d_name);
 			bprintf(out, "</td><td><form class=inline method=post action=/packages/delete "
 			             "onsubmit=\"return confirm('Delete the file %s from /data?')\">"
 			             "<input type=hidden name=file value=\"%s\">"
@@ -1138,8 +1154,14 @@ static void handle(const struct req *r, struct buf *resp)
 			out[0] = 0;
 			if (name_safe(arg)) {
 				char full[1300]; snprintf(full, sizeof full, "/data/%s", arg);
-				char *v[] = { "zurvan-pkg", "install", full, NULL };
-				run(v, out, sizeof out, NULL);
+				/* unsigned=1 comes only from the explicit, confirmed
+				 * "Install unsigned" button — the plain Install path is
+				 * always signature-verified by zurvan-pkg itself. */
+				char uns[4] = "";
+				form_get(body, "unsigned", uns, sizeof uns);
+				char *v[]  = { "zurvan-pkg", "install", full, NULL };
+				char *vu[] = { "zurvan-pkg", "install", "--unsigned", full, NULL };
+				run(uns[0] == '1' ? vu : v, out, sizeof out, NULL);
 			} else snprintf(out, sizeof out, "refused unsafe package name");
 			set_flash(out[0] ? out : "installed.");
 			redirect(resp, "/packages", NULL); return;
@@ -1168,8 +1190,12 @@ static void handle(const struct req *r, struct buf *resp)
 			size_t al = strlen(arg);
 			if (name_safe(arg) && al > 7 && strcmp(arg + al - 7, ".tar.gz") == 0) {
 				char full[1300]; snprintf(full, sizeof full, "/data/%s", arg);
-				if (unlink(full) == 0) snprintf(out, sizeof out, "deleted %s from /data", arg);
-				else                   snprintf(out, sizeof out, "could not delete %s: %s", arg, strerror(errno));
+				if (unlink(full) == 0) {
+					/* a .sig without its tarball is litter — take it along */
+					char sigp[1310]; snprintf(sigp, sizeof sigp, "%s.sig", full);
+					unlink(sigp);
+					snprintf(out, sizeof out, "deleted %s from /data", arg);
+				} else snprintf(out, sizeof out, "could not delete %s: %s", arg, strerror(errno));
 			} else snprintf(out, sizeof out, "refused: %s is not a .tar.gz on /data", arg);
 			set_flash(out);
 			redirect(resp, "/packages", NULL); return;

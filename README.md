@@ -128,7 +128,7 @@ Zurvan is tiny, but it is a **BIOS**, **x86-64** system today.
 | **Verified boot** | GPG-signed kernel/initrd/modules enforced by GRUB; A/B image slots with a signature-gated `zurvan-upgrade` and automatic rollback; read-only root |
 | **Supervisor** | [`zurvan-svc`](svc/) — a small declarative service manager: dependency order, restart-on-crash, live enable/disable, `no_new_privs`, drop-to-user |
 | **Packages** | [`zurvan-pkg`](packages/pkgtool/) — install static-binary packages from a curated [catalog](catalog/); the [set-dresser](packages/pkgtool/) links them into standard paths every boot |
-| **Catalog** | four packages ride on the ISO so a disconnected box is useful on day one; the rest is a signed [download](catalog/README.md#the-catalog-pack) — the catalog grows, the ISO doesn't |
+| **Catalog** | four packages ride on the ISO so a disconnected box is useful on day one; the rest is a signed [download](catalog/README.md#the-catalog-pack) — the catalog grows, the ISO doesn't. Every package's signature is verified **on the box, before unpacking** |
 | **The lion** | [`zurvan-lion`](lion/) — checksummed, atomic `/data` snapshots in a ring buffer; overlay or exact (mirror) restore |
 | **The snake** | [`zurvan-snake`](snake/) — runs jobs in an evaporating tmpfs mount-namespace sandbox; nothing touches the host |
 | **The face** | [`zurvan-face`](face/) — one static binary serving the whole admin panel over HTTPS |
@@ -199,9 +199,10 @@ cadence: `zurvan-catalog-<DATE>.tar.gz` on the
 [releases page](https://github.com/masoudqashqai/Zurvan-OS/releases). The pack
 is date-stamped, not OS-versioned — an OS release means the image changed, a
 catalog release means the curated set grew, and packages (static binaries, no
-OS coupling) run on any v2.x image. Verify the pack, then upload a package
-through the panel or `scp` it across — nothing on the box ever fetches
-software over the network, which is the whole point.
+OS coupling) run on any v2.x image. Upload a package and its `.sig` through
+the panel or `scp` them across — `zurvan-pkg` verifies the signature against
+the image's trust anchor **before unpacking**, and nothing on the box ever
+fetches software over the network, which is the whole point.
 
 That split is deliberate: the catalog can grow to any size without the ISO
 gaining a byte. See [`catalog/README.md`](catalog/README.md).

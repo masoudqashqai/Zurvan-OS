@@ -70,20 +70,23 @@ gpgv --keyring /etc/zurvan-signing.pub zurvan-catalog-2026.07.11.tar.gz.sig \
 ```
 
 Then get a package onto the box the way you'd move any other file — the panel's
-**Packages** page has an upload button, or `scp` it to `/data`.
+**Packages** page has an upload button, or `scp` it to `/data`. **Bring the
+package's `.sig` along** (the pack ships one beside every tarball):
+`zurvan-pkg install` verifies it with that same `gpgv` + trust anchor *before
+unpacking*, and refuses a package with a missing or bad signature. The panel
+does the same — a tarball on `/data` without its `.sig` only offers an
+explicit, confirmed **Install unsigned** button, mirroring the CLI escape
+hatch for packages you built yourself:
+
+```sh
+zurvan-pkg install --unsigned my-own-thing.tar.gz
+```
 
 **There is deliberately no `zurvan-pkg install <url>`.** Nothing on the box
 fetches software over the network. That would mean TLS, a repository server,
 and trusting the network during install — precisely the trust the seal
 milestone exists to avoid. Downloading on your machine and uploading to the box
 costs one extra step and keeps the install path offline.
-
-*Note the honest gap:* `zurvan-pkg install` does **not** verify a signature
-itself — it unpacks what you hand it, and the panel installs what you upload.
-The verification above is a step you choose to take. Making it automatic (a
-`.sig` beside each package, checked before unpacking) is a roadmap item, and a
-small one now that the verifier and the trust anchor are both already in the
-image.
 
 ## Building
 

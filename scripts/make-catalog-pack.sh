@@ -43,7 +43,16 @@ trap 'rm -rf "$STAGE"' EXIT
 ROOT="$STAGE/zurvan-catalog-$VERSION"
 mkdir -p "$ROOT"
 
-cp "$CAT"/*.tar.gz "$ROOT/"
+# Every package carries a detached .sig — zurvan-pkg verifies it before
+# unpacking, so the .sig must travel with the tarball all the way to /data.
+# Re-sign here so the sigs always match the tarballs we actually pack.
+if [ -f "$HERE/keys/zurvan-signing.pub" ]; then
+	"$SIGN" "$CAT"/*.tar.gz
+	cp "$CAT"/*.tar.gz "$CAT"/*.tar.gz.sig "$ROOT/"
+else
+	echo "!! no signing key — packages UNSIGNED, installs will refuse them" >&2
+	cp "$CAT"/*.tar.gz "$ROOT/"
+fi
 
 # An INDEX the pack can be read with, without a running Zurvan. Mark which
 # packages the ISO already carries so nobody wonders why they have them twice.
@@ -54,6 +63,9 @@ oniso_names=$(sed 's/#.*//' "$HERE/catalog/on-iso.txt" 2>/dev/null || true)
 	echo "Install on a running box with a /data disk:"
 	echo "    zurvan-pkg install <package>.tar.gz"
 	echo "or upload it in the web panel's Packages page."
+	echo
+	echo "Each package has a detached .sig beside it. Keep them together:"
+	echo "the box verifies the signature before unpacking and refuses without it."
 	echo
 	printf '%-28s %10s  %s\n' PACKAGE SIZE NOTE
 	for p in "$ROOT"/*.tar.gz; do

@@ -55,8 +55,13 @@ init: ## Compile the C PID 1, the supervisor, the lion, the snake, and the face
 rootfs: ## Assemble rootfs/ and pack rootfs.cpio.gz
 	@scripts/build.sh
 
-catalog: ## Build every package in catalog/ (static binaries + manifest)
+catalog: ## Build every package in catalog/ (static binaries + manifest + .sig)
 	@for b in catalog/build-*.sh; do "$$b"; done
+	@if [ -f keys/zurvan-signing.pub ]; then \
+		scripts/sign.sh build/catalog/*.tar.gz && echo ">> packages signed"; \
+	else \
+		echo "!! no signing key — packages UNSIGNED, installs will refuse them (scripts/make-keys.sh)" >&2; \
+	fi
 
 catalog-pack: ## Pack the catalog as a signed release download (the ISO carries only catalog/on-iso.txt)
 	@scripts/make-catalog-pack.sh

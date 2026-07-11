@@ -3,7 +3,10 @@
 #
 # A package is a gzipped tarball of STATIC binaries plus one manifest.yaml,
 # built by catalog/build-<name>.sh. Because nothing is dynamically linked,
-# install is just: unpack into /data/apps/<name>/ and plant symlinks.
+# install is just: verify the package's detached signature (gpgv against
+# /etc/zurvan-signing.pub — the same check zurvan-upgrade runs on images;
+# --unsigned skips it, loudly), unpack into /data/apps/<name>/, and plant
+# symlinks.
 #
 # The set-dresser trick: programs expect /usr/bin, /var/lib, /etc — and the
 # RAM root is freely writable — so the standard paths are symlinks into /data,
@@ -168,9 +171,30 @@ trap seal_root EXIT INT TERM
 # --- commands ---------------------------------------------------------------------
 cmd_install() {
 	need_data
-	open_root
-	tarball="$1"
+	tarball="$1"; unsigned="${2:-0}"
 	[ -f "$tarball" ] || fail "no such file: $tarball"
+
+	# The seal's promise extends to packages: verify the detached signature
+	# BEFORE unpacking, with the same gpgv + trust anchor that gates image
+	# upgrades. Catalog packages ship a .sig beside the tarball (the installer
+	# copies both to /data; the catalog pack carries one per package). A
+	# package you built yourself has no Zurvan signature — say so explicitly:
+	#     zurvan-pkg install --unsigned <pkg.tar.gz>
+	if [ "$unsigned" = 1 ]; then
+		log "WARNING: installing UNSIGNED package (--unsigned): $tarball"
+	else
+		pub=/etc/zurvan-signing.pub
+		command -v gpgv >/dev/null 2>&1 \
+			|| fail "gpgv missing from this image — cannot verify $(basename "$tarball") (--unsigned to override)"
+		[ -f "$pub" ] || fail "no trust anchor at $pub — cannot verify (--unsigned to override)"
+		[ -f "$tarball.sig" ] \
+			|| fail "no signature: $(basename "$tarball").sig not found beside the package — copy the .sig too, or use --unsigned for a package you built yourself"
+		gpgv --keyring "$pub" "$tarball.sig" "$tarball" 2>/dev/null \
+			|| fail "signature check FAILED for $(basename "$tarball") — tampered, unsigned, or wrong key; refusing to unpack"
+		log "signature OK: $(basename "$tarball")"
+	fi
+
+	open_root
 
 	# Unpack somewhere disposable first; trust the manifest, not the filename.
 	tmp="$APPS/.install.$$"
@@ -285,13 +309,17 @@ cmd_dress() {
 
 # --- dispatch -----------------------------------------------------------------------
 usage() {
-	echo "usage: zurvan-pkg install <pkg.tar.gz> | remove <name> | enable <name> | list | dress" >&2
+	echo "usage: zurvan-pkg install [--unsigned] <pkg.tar.gz> | remove <name> | enable <name> | list | dress" >&2
 	exit 1
 }
 [ $# -ge 1 ] || usage
 cmd="$1"; shift
 case "$cmd" in
-	install) [ $# -eq 1 ] || usage; cmd_install "$1" ;;
+	install)
+		unsigned=0
+		if [ "${1:-}" = "--unsigned" ]; then unsigned=1; shift; fi
+		[ $# -eq 1 ] || usage
+		cmd_install "$1" "$unsigned" ;;
 	remove)  [ $# -eq 1 ] || usage; cmd_remove "$1" ;;
 	enable)  [ $# -eq 1 ] || usage; cmd_enable "$1" ;;
 	list)    cmd_list ;;

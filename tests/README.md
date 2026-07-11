@@ -11,6 +11,10 @@ They are acceptance tests, not unit tests — expect several minutes each.
 | `m3-verified-boot.sh`| M3: GRUB boots the signed image, and refuses it after 16 flipped bytes in the initrd |
 | `m3-ab-upgrade.sh`   | M3: wrong-key bundle rejected before touching a slot; signed upgrade boots once + commits; corrupted trial slot falls back automatically |
 | `m3-seal.sh`         | M3: `/` is EROFS while `/data` writes; package installs reseal behind themselves; hardening sysctls, `no_new_privs`, key-only SSH |
+| `m4-lion.sh`         | M4: scheduled snapshots; restore brings a deleted file back; checksums gate restores; the ring holds; a full disk eats the oldest snapshot, never fails |
+| `m5-snake.sh`        | M5: a filthy job finishes, its artifact comes back, and the running system shows no trace it ever ran |
+| `m6-face.sh`         | M6: the panel serves HTTPS with its first-boot cert and drives services, snapshots, jobs, files, packages, and upgrades end-to-end |
+| `pkg-verify.sh`      | Package signatures: signed installs pass; missing `.sig` and tampered tarballs are refused before unpacking; `--unsigned` overrides; the seal survives refusals |
 
 ## Requirements
 
@@ -22,7 +26,8 @@ They are acceptance tests, not unit tests — expect several minutes each.
 - Built artifacts: `make all`, then `scripts/make-iso.sh` (which also emits
   `build/zurvan-upgrade.tar`). The catalog packages (`catalog/build-*.sh`)
   must be built before the ISO so the installer can ship them to `/data`.
-- TCP port 2222 free on the host (guest SSH is forwarded there).
+- TCP port 2222 free on the host (guest SSH is forwarded there;
+  `pkg-verify.sh` uses 2224).
 
 ## Running
 

@@ -139,9 +139,14 @@ mkdir -p "$DATA"
 mount -t ext4 "${PART}2" "$DATA"
 mkdir -p "$DATA/apps" "$DATA/srv" "$DATA/etc"
 [ -f "$DATA/zurvan.yaml" ] || cp /etc/zurvan.yaml "$DATA/zurvan.yaml" 2>/dev/null || true
-# Catalog packages shipped on the CD land on /data, ready for zurvan-pkg.
+# Catalog packages shipped on the CD land on /data, ready for zurvan-pkg —
+# each with its .sig, which zurvan-pkg verifies before unpacking.
 if ls "$CDMNT"/catalog/*.tar.gz >/dev/null 2>&1; then
 	cp "$CDMNT"/catalog/*.tar.gz "$DATA/"
+	# `if`, not `A && B`: under set -e a missing-sig ISO must not abort install.
+	if ls "$CDMNT"/catalog/*.tar.gz.sig >/dev/null 2>&1; then
+		cp "$CDMNT"/catalog/*.tar.gz.sig "$DATA/"
+	fi
 	log "catalog packages copied to /data: $(ls "$CDMNT"/catalog/*.tar.gz | wc -l)"
 fi
 

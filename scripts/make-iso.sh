@@ -169,7 +169,10 @@ if [ -f "$ONISO" ] && ls "$BUILD"/catalog/*.tar.gz >/dev/null 2>&1; then
 		# <name>-<version>.tar.gz — the version is the build script's business.
 		pkg=$(ls "$BUILD/catalog/$name"-*.tar.gz 2>/dev/null | head -1)
 		[ -n "$pkg" ] || { echo "!! on-iso.txt names '$name' but it is not built" >&2; exit 1; }
-		cp "$pkg" "$STAGE/catalog/"
+		# Re-sign so the .sig always matches the tarball we actually ship —
+		# zurvan-pkg refuses to unpack a package whose signature fails.
+		"$SIGN" "$pkg"
+		cp "$pkg" "$pkg.sig" "$STAGE/catalog/"
 		n=$((n + 1))
 	done
 	echo ">> catalog packages on ISO: $n ($(du -sh "$STAGE/catalog" | cut -f1))"

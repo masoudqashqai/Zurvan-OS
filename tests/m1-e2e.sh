@@ -51,7 +51,9 @@ services:
   - networking
   - ssh
 EOF
-cp build/catalog/hello-1.0.tar.gz /mnt/zdata/
+# installs are signature-gated: sign (idempotent) and ship the .sig along
+scripts/sign.sh build/catalog/hello-1.0.tar.gz
+cp build/catalog/hello-1.0.tar.gz build/catalog/hello-1.0.tar.gz.sig /mnt/zdata/
 umount /mnt/zdata
 losetup -d "$LOOP"
 
