@@ -35,6 +35,7 @@ in the pack unless it earns a line in [`on-iso.txt`](on-iso.txt).
 | `sqlite3` | ✅ | The embedded SQL database | One static shell binary; a database is one file — put it under `/data/srv`. FTS5 + R-Tree on; loadable extensions off (no loader to load them). |
 | `curl`   | ✅ | TLS-capable HTTP/FTP client | TLS is **BearSSL**, the same stack the panel uses — no OpenSSL enters the image. Ships Mozilla's CA bundle at `/data/apps/curl/etc/`. |
 | `tick`   | ✅ | A heartbeat daemon | Demo service for the supervisor — logs to `/data/srv/tick` on a timer. Also the fixture `tests/m3-seal.sh` installs. |
+| `caddy`  | — | Web server / reverse proxy | The catalog's first Go package — static by construction (CGO off), and at ~40 MB exactly what the pack tier is for. Serves :8080 by default (nginx keeps :80); the Caddyfile ships reverse-proxy and auto-HTTPS recipes; caddy state lives in `/data/srv/caddy`. |
 | `hello`  | — | The smallest possible package | Proves the pipeline: a link, a state link, a counter that survives reboot. |
 | `zurvanos` | — | An animated banner, and nothing else | A cheerful demo for exercising the panel's upload + install flow. |
 

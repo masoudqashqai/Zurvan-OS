@@ -262,5 +262,5 @@ beyond v2: UEFI + enroll-your-own-key Secure Boot, TPM-sealed keys, and image/co
 ## License
 
 [MIT](LICENSE). The components Zurvan builds from source (Linux, busybox, bash, dropbear,
-e2fsprogs, GnuPG, BearSSL, and the catalog packages — nginx, sqlite3, curl) keep their own
-upstream licenses.
+e2fsprogs, GnuPG, BearSSL, and the catalog packages — nginx, sqlite3, curl, caddy) keep their
+own upstream licenses.
