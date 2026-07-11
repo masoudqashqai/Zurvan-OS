@@ -6,8 +6,8 @@
 > entirely from RAM and keeps everything worth keeping on one `/data` partition.
 
 <p align="center">
-  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/download/v2.2.0/zurvan-2.2.0.iso">
-    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan--2.2.0.iso%20(~41%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan-2.2.0.iso">
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/download/v2.3.0/zurvan-2.3.0.iso">
+    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan--2.3.0.iso%20(~41%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan-2.3.0.iso">
   </a>
   &nbsp;
   <a href="https://github.com/masoudqashqai/Zurvan-OS/releases">
@@ -54,7 +54,7 @@ provably identical to the day it was set up.
 
 ## Try it — live, no install
 
-Download **[zurvan-2.2.0.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/download/v2.2.0/zurvan-2.2.0.iso)**
+Download **[zurvan-2.3.0.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/download/v2.3.0/zurvan-2.3.0.iso)**
 and boot it (VMware, QEMU, or real hardware). It comes up entirely in RAM, self-configures
 from its built-in YAML, and starts the **web admin panel** automatically. The console
 prints a banner:
