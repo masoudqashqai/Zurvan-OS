@@ -6,8 +6,8 @@
 > entirely from RAM and keeps everything worth keeping on one `/data` partition.
 
 <p align="center">
-  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-2.2.0.iso">
-    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan--2.2.0.iso%20(~41%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan-2.2.0.iso">
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-2.3.0.iso">
+    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan--2.3.0.iso%20(~41%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan-2.3.0.iso">
   </a>
   &nbsp;
   <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest">
@@ -16,8 +16,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-catalog-2.2.0.tar.gz">
-    <img src="https://img.shields.io/badge/catalog%20pack-zurvan--catalog--2.2.0.tar.gz%20(~4%20MB)-555555?style=flat-square&logo=gnuprivacyguard&logoColor=white" alt="Download the catalog pack">
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-catalog-2.3.0.tar.gz">
+    <img src="https://img.shields.io/badge/catalog%20pack-zurvan--catalog--2.3.0.tar.gz%20(~22%20MB)-555555?style=flat-square&logo=gnuprivacyguard&logoColor=white" alt="Download the catalog pack">
   </a>
   <br><em>The ISO carries four packages. The signed catalog pack carries the rest.</em>
 </p>
@@ -54,7 +54,7 @@ provably identical to the day it was set up.
 
 ## Try it — live, no install
 
-Download **[zurvan-2.2.0.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-2.2.0.iso)**
+Download **[zurvan-2.3.0.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/latest/download/zurvan-2.3.0.iso)**
 and boot it (VMware, QEMU, or real hardware). It comes up entirely in RAM, self-configures
 from its built-in YAML, and starts the **web admin panel** automatically. The console
 prints a banner:
@@ -183,15 +183,16 @@ software," it is *everything in the catalog works perfectly and cannot break
 each other.*
 
 Four packages ride on the ISO, so a box with no network is useful the moment
-you install it:
+you install it; the rest ship in the signed catalog pack:
 
-| Package | What it is |
-|---------|-----------|
-| [`nginx`](catalog/build-nginx.sh) | Web server, fully static — a real supervised service |
-| [`sqlite3`](catalog/build-sqlite3.sh) | The embedded SQL database; a database is one file |
-| [`curl`](catalog/build-curl.sh) | HTTP/TLS client, over BearSSL — no OpenSSL in the image |
-| [`tick`](catalog/build-tick.sh) | A heartbeat daemon; the supervisor's demo service |
-| [`hello`](catalog/build-hello.sh), [`zurvanos`](catalog/build-zurvanos.sh) | The smallest possible packages — proof the pipeline works |
+| Package | On the ISO | What it is |
+|---------|:---:|-----------|
+| [`nginx`](catalog/build-nginx.sh) | ✅ | Web server, fully static — a real supervised service |
+| [`sqlite3`](catalog/build-sqlite3.sh) | ✅ | The embedded SQL database; a database is one file |
+| [`curl`](catalog/build-curl.sh) | ✅ | HTTP/TLS client, over BearSSL — no OpenSSL in the image |
+| [`tick`](catalog/build-tick.sh) | ✅ | A heartbeat daemon; the supervisor's demo service |
+| [`caddy`](catalog/build-caddy.sh) | — | Web server / reverse proxy, one static Go binary — serves :8080, recipes for proxying and auto-HTTPS inside |
+| [`hello`](catalog/build-hello.sh), [`zurvanos`](catalog/build-zurvanos.sh) | — | The smallest possible packages — proof the pipeline works |
 
 The rest of the catalog is a **separate signed download**,
 `zurvan-catalog-<VERSION>.tar.gz`, published next to the ISO on the

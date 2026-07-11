@@ -53,8 +53,8 @@ The pack is signed with the same key that signs the kernel and initrd, so you
 can verify it in either place. On your own machine:
 
 ```sh
-gpg --verify zurvan-catalog-2.2.0.tar.gz.sig zurvan-catalog-2.2.0.tar.gz
-sha256sum -c zurvan-catalog-2.2.0.tar.gz.sha256
+gpg --verify zurvan-catalog-2.3.0.tar.gz.sig zurvan-catalog-2.3.0.tar.gz
+sha256sum -c zurvan-catalog-2.3.0.tar.gz.sha256
 ```
 
 Or on the box itself — every Zurvan image carries `gpgv` and the trust anchor
@@ -62,8 +62,8 @@ at `/etc/zurvan-signing.pub`, which is the same check `zurvan-upgrade` runs on
 an image before it will touch a disk:
 
 ```sh
-gpgv --keyring /etc/zurvan-signing.pub zurvan-catalog-2.2.0.tar.gz.sig \
-                                       zurvan-catalog-2.2.0.tar.gz
+gpgv --keyring /etc/zurvan-signing.pub zurvan-catalog-2.3.0.tar.gz.sig \
+                                       zurvan-catalog-2.3.0.tar.gz
 ```
 
 Then get a package onto the box the way you'd move any other file — the panel's
