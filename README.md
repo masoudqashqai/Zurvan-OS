@@ -6,8 +6,8 @@
 > entirely from RAM and keeps everything worth keeping on one `/data` partition.
 
 <p align="center">
-  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/download/v2.3.0/zurvan-2.3.0.iso">
-    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan--2.3.0.iso%20(~41%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan-2.3.0.iso">
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/download/v2.4.0/zurvan-2.4.0.iso">
+    <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20ZURVAN-zurvan--2.4.0.iso%20(~41%20MB)-2ea44f?style=for-the-badge&logo=linux&logoColor=white" alt="Download zurvan-2.4.0.iso">
   </a>
   &nbsp;
   <a href="https://github.com/masoudqashqai/Zurvan-OS/releases">
@@ -54,10 +54,10 @@ provably identical to the day it was set up.
 
 ## Try it — live, no install
 
-Download **[zurvan-2.3.0.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/download/v2.3.0/zurvan-2.3.0.iso)**
+Download **[zurvan-2.4.0.iso](https://github.com/masoudqashqai/Zurvan-OS/releases/download/v2.4.0/zurvan-2.4.0.iso)**
 and boot it (VMware, QEMU, or real hardware). It comes up entirely in RAM, self-configures
 from its built-in YAML, and starts the **web admin panel** automatically. The console
-prints a banner:
+prints a banner right above the first prompt (reprint it anytime with `zurvan-panel`):
 
 ```
 +------------------------------------------+
@@ -141,7 +141,10 @@ uptime) and per-service **restart / enable / disable**, the lion's snapshots wit
 button, the snake's job runner and history, a `/data` file browser and editor (new folder
 and file, upload, rename, copy, delete — binaries are protected from accidental edits), and
 package upload / install / **enable** / remove — enabling a service package writes it into
-`zurvan.yaml` and starts it live. Signed image upgrades and reboot round it out. Every
+`zurvan.yaml` and starts it live. Uploads take several files at once (a tarball and its
+`.sig` in one dialog), and the whole **catalog pack uploads as-is**: every package inside
+is staged onto `/data` with its signature, ready to install. Signed image upgrades and
+reboot round it out. Every
 action reports its result. It runs as an ordinary supervised service and can be turned off
 with one line in the YAML.
 
