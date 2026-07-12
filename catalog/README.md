@@ -70,9 +70,12 @@ gpgv --keyring /etc/zurvan-signing.pub zurvan-catalog-2026.07.12.tar.gz.sig \
                                        zurvan-catalog-2026.07.12.tar.gz
 ```
 
-Then get a package onto the box the way you'd move any other file — the panel's
-**Packages** page has an upload button, or `scp` it to `/data`. **Bring the
-package's `.sig` along** (the pack ships one beside every tarball):
+Then get packages onto the box. The fast path: **upload the pack itself** on
+the panel's **Packages** page — every package inside is staged onto `/data`
+with its `.sig`, ready to install. Or move packages one at a time, the way
+you'd move any other file: the same upload button takes a tarball and its
+`.sig` together (multi-select), and `scp` to `/data` works as it always did.
+**Keep each package's `.sig` beside it** (the pack ships one per tarball):
 `zurvan-pkg install` verifies it with that same `gpgv` + trust anchor *before
 unpacking*, and refuses a package with a missing or bad signature. The panel
 does the same — a tarball on `/data` without its `.sig` only offers an

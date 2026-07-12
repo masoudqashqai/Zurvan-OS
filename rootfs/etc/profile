@@ -18,11 +18,19 @@ else
 fi
 export PS1
 
-# A one-line greeting, once, on an interactive shell. The panel URL + token are
-# printed separately at boot (and by `zurvan-panel`); this just names the box.
+# A one-line greeting, once, on an interactive shell.
 case "$-" in
 	*i*)
 		printf '\n  \033[38;5;39mZurvan\033[0m — the snake sheds, the lion remembers.\n'
 		printf '  %s · try: zurvan-panel · zurvan-svc state · zurvan-pkg list\n\n' "$(hostname 2>/dev/null || echo zurvan)"
+		# On the console, the boot-time panel box (URL + admin token) has
+		# scrolled off behind later boot lines by the time this prompt appears
+		# — reprint it here so it's the last thing above the prompt. Not over
+		# SSH: those sessions already authenticated, no need to re-shout the
+		# token into every remote scrollback.
+		case "$(tty 2>/dev/null)" in
+			*pts*) ;;
+			*) command -v zurvan-panel >/dev/null 2>&1 && zurvan-panel ;;
+		esac
 		;;
 esac

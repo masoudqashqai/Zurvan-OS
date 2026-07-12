@@ -50,7 +50,9 @@
 #define REQ_MAX    (256 * 1024)        /* cap a text form field (the editor) */
 #define OUT_MAX    (512 * 1024)
 #define HDR_MAX    (16 * 1024)         /* request headers must fit here */
-#define UPLOAD_MAX (32 * 1024 * 1024)  /* cap an uploaded body (packages/bundles) */
+#define UPLOAD_MAX (128 * 1024 * 1024) /* cap an uploaded body — must clear the
+                                          whole catalog pack (34 MB and growing),
+                                          plus multi-file uploads in one body */
 
 static const char *g_dir = DEF_DIR;
 static char g_token[TOKEN_LEN + 1];
@@ -292,6 +294,72 @@ static int save_file(const char *dir, const char *name, const void *data, size_t
 static int name_safe(const char *s)
 {
 	return s[0] && !strchr(s, '/') && !strchr(s, '\\') && !strstr(s, "..");
+}
+
+/* --- catalog-pack staging -------------------------------------------------------
+ * The release page ships the whole catalog as one signed tarball
+ * (zurvan-catalog-<DATE>.tar.gz). Uploading that used to mean: untar it on
+ * your own machine, then feed the panel one file at a time. Now the panel
+ * recognizes the pack by name and stages every inner package tarball + .sig
+ * pair into /data itself. Only a convenience — the security gate is untouched:
+ * each install still verifies that package's own .sig before unpacking. */
+static int is_catalog_pack(const char *name)
+{
+	size_t l = strlen(name);
+	return strncmp(name, "zurvan-catalog-", 15) == 0 &&
+	       l > 22 && strcmp(name + l - 7, ".tar.gz") == 0;
+}
+
+static int stage_pack(const char *fname, char *msg, size_t msgsz)
+{
+	char pack[1300]; snprintf(pack, sizeof pack, "/data/%s", fname);
+	/* Stage on /data, not tmpfs: the pack is tens of MB, and being on the
+	 * same filesystem lets the moves below be rename(), not copies. */
+	char stage[] = "/data/.pack-stage-XXXXXX";
+	if (!mkdtemp(stage)) {
+		snprintf(msg, msgsz, "cannot stage %s: %s", fname, strerror(errno));
+		return -1;
+	}
+	char out[512] = "";
+	char *tv[] = { "tar", "-xzf", pack, "-C", stage, NULL };
+	int rc = run(tv, out, sizeof out, NULL);
+
+	/* The pack root is a single zurvan-catalog-<ver>/ directory; walk one
+	 * level down and pull every package tarball and its .sig up to /data. */
+	int npkg = 0;
+	if (rc == 0) {
+		DIR *sd = opendir(stage);
+		struct dirent *se;
+		while (sd && (se = readdir(sd))) {
+			if (se->d_name[0] == '.') continue;
+			char sub[1400]; snprintf(sub, sizeof sub, "%s/%s", stage, se->d_name);
+			DIR *pd = opendir(sub);
+			struct dirent *pe;
+			while (pd && (pe = readdir(pd))) {
+				size_t l = strlen(pe->d_name);
+				int tarball = l > 7  && strcmp(pe->d_name + l - 7,  ".tar.gz") == 0;
+				int sig     = l > 11 && strcmp(pe->d_name + l - 11, ".tar.gz.sig") == 0;
+				if ((!tarball && !sig) || !name_safe(pe->d_name)) continue;
+				char from[1700], to[1400];
+				snprintf(from, sizeof from, "%s/%s", sub, pe->d_name);
+				snprintf(to,   sizeof to,   "/data/%s", pe->d_name);
+				if (rename(from, to) == 0 && tarball) npkg++;
+			}
+			if (pd) closedir(pd);
+		}
+		if (sd) closedir(sd);
+	}
+	char *rv[] = { "rm", "-rf", stage, NULL };
+	run(rv, NULL, 0, NULL);
+
+	if (rc != 0 || npkg == 0) {
+		snprintf(msg, msgsz, "could not unpack %s%s%s — kept it on /data",
+		         fname, out[0] ? ": " : "", out);
+		return -1;
+	}
+	unlink(pack);   /* staged in full; the pack file itself is now litter */
+	snprintf(msg, msgsz, "staged %d packages (each with its .sig) from %s", npkg, fname);
+	return 0;
 }
 
 /* Human-readable size, 1024-based like `ls -h`: "743 B", "1.4 KB", "3.0 MB". */
@@ -707,7 +775,7 @@ static void view_files(struct buf *out, const char *rel)
 	 * are type=button so they never submit it. */
 	bprintf(out, "<div class=card><form method=post action=\"/files/upload?path=%s\" "
 	             "enctype=multipart/form-data><div class=row>"
-	             "<input type=file name=file><button>Upload here</button>"
+	             "<input type=file name=file multiple><button>Upload here</button>"
 	             "<button type=button class=g onclick=\"nd('%s')\">New folder</button>"
 	             "<button type=button class=g onclick=\"nf('%s')\">New file</button>"
 	             "</div></form></div>", rel, rel, rel);
@@ -830,12 +898,14 @@ static void view_packages(struct buf *out, const char *flash)
 	    "signature is verified before anything is unpacked, then files are linked into the "
 	    "standard paths on every boot.</p>");
 
-	bputs(out, "<h2>Upload a package</h2><div class=card>"
+	bputs(out, "<h2>Upload packages</h2><div class=card>"
 	           "<form method=post action=/packages/upload enctype=multipart/form-data>"
-	           "<div class=row><input type=file name=file accept=.gz,.tgz,.tar.gz,.sig>"
+	           "<div class=row><input type=file name=file multiple accept=.gz,.tgz,.tar.gz,.sig>"
 	           "<button>Upload to /data</button></div>"
-	           "<p class=dim>Upload the package's .sig the same way (the catalog pack ships one "
-	           "per package), then click Install below.</p></form></div>");
+	           "<p class=dim>Select a tarball and its .sig together (multi-select works) — or "
+	           "upload a whole <span class=mono>zurvan-catalog-*.tar.gz</span> release pack and "
+	           "every package inside is staged here with its .sig. Then click Install below.</p>"
+	           "</form></div>");
 
 	char installed[8192] = "";
 	char *pv[] = { "zurvan-pkg", "list", NULL };
@@ -960,7 +1030,7 @@ static void view_system(struct buf *out, const char *flash)
 
 	bputs(out, "<h2>Upgrade image (A/B, signed)</h2><div class=card>"
 	           "<form method=post action=/system/upload enctype=multipart/form-data>"
-	           "<div class=row><input type=file name=file accept=.tar>"
+	           "<div class=row><input type=file name=file multiple accept=.tar>"
 	           "<button>Upload bundle to /data</button></div></form>"
 	           "<p class=dim>Then stage it below. (Or place a signed "
 	           "<span class=mono>*.tar</span> in /data via scp.)</p><table>");
@@ -1038,7 +1108,8 @@ static void redirect(struct buf *resp, const char *to, const char *setcookie)
 }
 
 /* defined below, in the TLS/HTTP plumbing section */
-static int multipart_file(const struct req *r, char *fname, size_t fnsz,
+static int multipart_next(const struct req *r, const char **cur,
+                          char *fname, size_t fnsz,
                           const char **data, size_t *dlen);
 
 /* Read one service's state word ("up"/"down"/"disabled"/"stopping"). */
@@ -1201,25 +1272,47 @@ static void handle(const struct req *r, struct buf *resp)
 			redirect(resp, "/packages", NULL); return;
 		}
 		if (strcmp(r->path, "/packages/upload") == 0) {
-			char fn[256]; const char *fdata; size_t fdlen;
-			if (multipart_file(r, fn, sizeof fn, &fdata, &fdlen) && name_safe(fn))
-				save_file("/data", fn, fdata, fdlen);
+			/* Every file part in one body: a tarball + .sig pair selected
+			 * together, several of them — or the whole catalog pack, which
+			 * gets unpacked and staged as its packages + sigs. */
+			char fn[256]; const char *fdata; size_t fdlen; const char *cur = NULL;
+			char msg[1024]; size_t mn = 0; int nfile = 0;
+			msg[0] = 0;
+			while (multipart_next(r, &cur, fn, sizeof fn, &fdata, &fdlen)) {
+				if (!name_safe(fn) || save_file("/data", fn, fdata, fdlen) != 0)
+					continue;
+				nfile++;
+				if (is_catalog_pack(fn)) {
+					char pm[512];
+					stage_pack(fn, pm, sizeof pm);
+					mn += (size_t)snprintf(msg + mn, sizeof msg - mn,
+					                       "%s%s", mn ? "; " : "", pm);
+					if (mn >= sizeof msg) mn = sizeof msg - 1;
+				}
+			}
+			if (nfile && !mn)
+				snprintf(msg, sizeof msg, "uploaded %d file%s to /data",
+				         nfile, nfile == 1 ? "" : "s");
+			set_flash(msg[0] ? msg : "no file arrived — pick one and try again.");
 			redirect(resp, "/packages", NULL); return;
 		}
 		if (strcmp(r->path, "/system/upload") == 0) {
-			char fn[256]; const char *fdata; size_t fdlen;
-			if (multipart_file(r, fn, sizeof fn, &fdata, &fdlen) && name_safe(fn))
-				save_file("/data", fn, fdata, fdlen);
+			char fn[256]; const char *fdata; size_t fdlen; const char *cur = NULL;
+			while (multipart_next(r, &cur, fn, sizeof fn, &fdata, &fdlen))
+				if (name_safe(fn))
+					save_file("/data", fn, fdata, fdlen);
 			redirect(resp, "/system", NULL); return;
 		}
 		if (strcmp(r->path, "/files/upload") == 0) {
-			/* target dir comes from the query (?path=REL); the body is the file */
+			/* target dir comes from the query (?path=REL); the body is the files */
 			char dir[1024] = ""; form_get(r->query, "path", dir, sizeof dir);
 			char fn[256]; const char *fdata; size_t fdlen; char abs[1200];
-			if (multipart_file(r, fn, sizeof fn, &fdata, &fdlen) &&
-			    name_safe(fn) && !strstr(dir, "..")) {
+			const char *cur = NULL;
+			if (!strstr(dir, "..")) {
 				snprintf(abs, sizeof abs, "/data%s%s", dir[0] ? "/" : "", dir);
-				save_file(abs, fn, fdata, fdlen);
+				while (multipart_next(r, &cur, fn, sizeof fn, &fdata, &fdlen))
+					if (name_safe(fn))
+						save_file(abs, fn, fdata, fdlen);
 			}
 			char to[1100]; snprintf(to, sizeof to, "/files?path=%s", dir);
 			redirect(resp, to, NULL); return;
@@ -1450,10 +1543,13 @@ static int read_request(br_sslio_context *ioc, struct req *r)
 	return 0;
 }
 
-/* Find the first file part of a multipart/form-data body. On success returns 1
- * and sets fname (basename, into caller buffer), *data and *dlen (into the
- * request body — not copied). */
-static int multipart_file(const struct req *r, char *fname, size_t fnsz,
+/* Walk the file parts of a multipart/form-data body — one call per file, so a
+ * single <input multiple> upload (tarball + .sig together, or a dozen packages)
+ * lands in one request. *cur is the walk state: start it at NULL; each call
+ * returns 1 with the next file part (fname is the basename, *data and *dlen
+ * point into the request body — not copied), 0 when no parts remain. */
+static int multipart_next(const struct req *r, const char **cur,
+                          char *fname, size_t fnsz,
                           const char **data, size_t *dlen)
 {
 	if (!r->body || !strcasestr(r->ctype, "multipart/form-data"))
@@ -1469,7 +1565,8 @@ static int multipart_file(const struct req *r, char *fname, size_t fnsz,
 	bnd[i] = 0;
 	size_t blen = strlen(bnd);
 
-	const char *body = r->body, *end = body + r->clen, *p = body;
+	const char *body = r->body, *end = body + r->clen;
+	const char *p = *cur ? *cur : body;
 	while (p < end) {
 		const char *bpos = memmem(p, (size_t)(end - p), bnd, blen);
 		if (!bpos) break;
@@ -1494,10 +1591,12 @@ static int multipart_file(const struct req *r, char *fname, size_t fnsz,
 			char *s = strrchr(fname, '/');  if (s) memmove(fname, s + 1, strlen(s + 1) + 1);
 			s = strrchr(fname, '\\');       if (s) memmove(fname, s + 1, strlen(s + 1) + 1);
 			*data = content; *dlen = (size_t)(ce - content);
+			*cur = cend;   /* resume after this part */
 			return 1;
 		}
 		p = cend;
 	}
+	*cur = end;
 	return 0;
 }
 

@@ -16,6 +16,7 @@ They are acceptance tests, not unit tests — expect several minutes each.
 | `m6-face.sh`         | M6: the panel serves HTTPS with its first-boot cert and drives services, snapshots, jobs, files, packages, and upgrades end-to-end |
 | `pkg-verify.sh`      | Package signatures: signed installs pass; missing `.sig` and tampered tarballs are refused before unpacking; `--unsigned` overrides; the seal survives refusals |
 | `pkg-syncthing.sh`   | The pack-tier flow with a real package: syncthing (not on the ISO) ships to `/data` as tarball + `.sig`, installs through the signature gate, enables live; daemon up with state on `/data`, GUI loopback-only on :8384, sync protocol on :22000 |
+| `panel-ux.sh`        | Panel UX: URL+token box printed once, right above the first console prompt; tarball + `.sig` upload in one multi-file request; a whole catalog pack uploads as-is and every package inside is staged with its `.sig`; staged packages install through the signature gate |
 
 ## Requirements
 
@@ -28,9 +29,10 @@ They are acceptance tests, not unit tests — expect several minutes each.
   `build/zurvan-upgrade.tar`). The catalog packages (`catalog/build-*.sh`)
   must be built before the ISO so the installer can ship them to `/data`.
 - TCP port 2222 free on the host (guest SSH is forwarded there;
-  `pkg-verify.sh` uses 2224, `pkg-syncthing.sh` 2225).
+  `pkg-verify.sh` uses 2224, `pkg-syncthing.sh` 2225, `panel-ux.sh` 2226 + 8444).
 - `pkg-syncthing.sh` additionally needs `build/catalog/syncthing-*.tar.gz`
-  with its `.sig` (`catalog/build-syncthing.sh`, signed via `make catalog`).
+  with its `.sig` (`catalog/build-syncthing.sh`, signed via `make catalog`);
+  `panel-ux.sh` needs that plus a catalog pack (`make catalog-pack`) and `curl`.
 
 ## Running
 

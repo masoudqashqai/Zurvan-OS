@@ -297,9 +297,9 @@ row "Token:  $tok"  "Token:  ${K}${tok}${Z}"
 bar
 PANEL
 				chmod +x /usr/bin/zurvan-panel
-				# Print the box now (the same command, one source of truth), then
-				# note where the identity lives. The box is coloured on the console.
-				/usr/bin/zurvan-panel
+				# NOT printed here: mid-boot it just scrolls away under the
+				# lines that follow. /etc/profile runs the same command on the
+				# console right above the first prompt — once, where you look.
 				log "face: TLS identity + admin token ($fmode); reprint anytime with 'zurvan-panel'"
 				enable_svc face
 			else
