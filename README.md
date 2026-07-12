@@ -16,8 +16,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/download/catalog-2026.07.11/zurvan-catalog-2026.07.11.tar.gz">
-    <img src="https://img.shields.io/badge/catalog%20pack-zurvan--catalog--2026.07.11.tar.gz%20(~22%20MB)-555555?style=flat-square&logo=gnuprivacyguard&logoColor=white" alt="Download the catalog pack">
+  <a href="https://github.com/masoudqashqai/Zurvan-OS/releases/download/catalog-2026.07.12/zurvan-catalog-2026.07.12.tar.gz">
+    <img src="https://img.shields.io/badge/catalog%20pack-zurvan--catalog--2026.07.12.tar.gz%20(~34%20MB)-555555?style=flat-square&logo=gnuprivacyguard&logoColor=white" alt="Download the catalog pack">
   </a>
   <br><em>The ISO carries four packages. The signed catalog pack carries the rest.</em>
 </p>
@@ -192,6 +192,7 @@ you install it; the rest ship in the signed catalog pack:
 | [`curl`](catalog/build-curl.sh) | ✅ | HTTP/TLS client, over BearSSL — no OpenSSL in the image |
 | [`tick`](catalog/build-tick.sh) | ✅ | A heartbeat daemon; the supervisor's demo service |
 | [`caddy`](catalog/build-caddy.sh) | — | Web server / reverse proxy, one static Go binary — serves :8080, recipes for proxying and auto-HTTPS inside |
+| [`syncthing`](catalog/build-syncthing.sh) | — | Continuous file sync between machines — state under `/data`, GUI tunneled over SSH, self-upgrade compiled out |
 | [`hello`](catalog/build-hello.sh), [`zurvanos`](catalog/build-zurvanos.sh) | — | The smallest possible packages — proof the pipeline works |
 
 The rest of the catalog is a **separate signed download** with its own release

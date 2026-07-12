@@ -36,6 +36,7 @@ in the pack unless it earns a line in [`on-iso.txt`](on-iso.txt).
 | `curl`   | ✅ | TLS-capable HTTP/FTP client | TLS is **BearSSL**, the same stack the panel uses — no OpenSSL enters the image. Ships Mozilla's CA bundle at `/data/apps/curl/etc/`. |
 | `tick`   | ✅ | A heartbeat daemon | Demo service for the supervisor — logs to `/data/srv/tick` on a timer. Also the fixture `tests/m3-seal.sh` installs. |
 | `caddy`  | — | Web server / reverse proxy | The catalog's first Go package — static by construction (CGO off), and at ~40 MB exactly what the pack tier is for. Serves :8080 by default (nginx keeps :80); the Caddyfile ships reverse-proxy and auto-HTTPS recipes; caddy state lives in `/data/srv/caddy`. |
+| `syncthing` | — | Continuous file sync between machines | Static Go (pure-Go sqlite), self-upgrade compiled out — new versions come from the catalog. State in `/data/srv/syncthing`; **create sync folders under `/data`** (anywhere else evaporates at reboot). GUI on loopback :8384 — tunnel in with `ssh -L 8384:127.0.0.1:8384 root@box`, or set a GUI password and change the address (persists in config.xml). Sync protocol on :22000. |
 | `hello`  | — | The smallest possible package | Proves the pipeline: a link, a state link, a counter that survives reboot. |
 | `zurvanos` | — | An animated banner, and nothing else | A cheerful demo for exercising the panel's upload + install flow. |
 
@@ -56,8 +57,8 @@ The pack is signed with the same key that signs the kernel and initrd, so you
 can verify it in either place. On your own machine:
 
 ```sh
-gpg --verify zurvan-catalog-2026.07.11.tar.gz.sig zurvan-catalog-2026.07.11.tar.gz
-sha256sum -c zurvan-catalog-2026.07.11.tar.gz.sha256
+gpg --verify zurvan-catalog-2026.07.12.tar.gz.sig zurvan-catalog-2026.07.12.tar.gz
+sha256sum -c zurvan-catalog-2026.07.12.tar.gz.sha256
 ```
 
 Or on the box itself — every Zurvan image carries `gpgv` and the trust anchor
@@ -65,8 +66,8 @@ at `/etc/zurvan-signing.pub`, which is the same check `zurvan-upgrade` runs on
 an image before it will touch a disk:
 
 ```sh
-gpgv --keyring /etc/zurvan-signing.pub zurvan-catalog-2026.07.11.tar.gz.sig \
-                                       zurvan-catalog-2026.07.11.tar.gz
+gpgv --keyring /etc/zurvan-signing.pub zurvan-catalog-2026.07.12.tar.gz.sig \
+                                       zurvan-catalog-2026.07.12.tar.gz
 ```
 
 Then get a package onto the box the way you'd move any other file — the panel's
