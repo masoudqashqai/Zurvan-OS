@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/panel.gif" alt="The Zurvan web admin panel — services, snapshots, jobs, files, packages, system" width="820">
+  <img src="docs/panel.gif" alt="The Zurvan web admin panel — services, snapshots, jobs, files, packages, system">
   <br><em>The built-in web admin panel — over HTTPS, on by default.</em>
 </p>
 
